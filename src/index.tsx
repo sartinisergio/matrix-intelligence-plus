@@ -606,6 +606,11 @@ function dashboardPage(): string {
         <i class="fas fa-bullseye w-5 text-center"></i>
         <span>Campagne</span>
       </button>
+      <button onclick="navigateTo('monitoraggio')" id="nav-monitoraggio"
+              class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200">
+        <i class="fas fa-binoculars w-5 text-center"></i>
+        <span>Monitoraggio</span>
+      </button>
       <button onclick="navigateTo('archivio')" id="nav-archivio"
               class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200">
         <i class="fas fa-book-open w-5 text-center"></i>
@@ -1124,6 +1129,221 @@ function dashboardPage(): string {
         </div>
       </section>
 
+      <!-- ===================== SEZIONE MONITORAGGIO DISCIPLINARE ===================== -->
+      <section id="section-monitoraggio" class="section hidden">
+        <div class="mb-6 flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-800">
+              <i class="fas fa-binoculars text-zanichelli-light mr-2"></i>
+              Monitoraggio Disciplinare
+            </h2>
+            <p class="text-gray-500 mt-1">Analisi strategica di una disciplina: identifica il volume ottimale per ogni docente</p>
+          </div>
+          <button onclick="showNewMonitoraggioForm()" id="btn-new-monitoraggio"
+                  class="px-4 py-2 bg-zanichelli-blue text-white rounded-lg font-medium hover:bg-zanichelli-dark transition-colors flex items-center gap-2">
+            <i class="fas fa-plus"></i>
+            Nuovo Monitoraggio
+          </button>
+        </div>
+
+        <!-- Lista monitoraggi esistenti -->
+        <div id="monitoraggi-list" class="space-y-4">
+          <div class="text-center py-12 text-gray-400">
+            <i class="fas fa-binoculars text-4xl mb-3 block"></i>
+            <p>Nessun monitoraggio creato</p>
+            <p class="text-sm mt-1">Crea il tuo primo monitoraggio disciplinare per analizzare una materia</p>
+          </div>
+        </div>
+
+        <!-- Form nuovo monitoraggio (nascosto) -->
+        <div id="monitoraggio-form-container" class="hidden mt-6">
+          <div class="bg-white rounded-xl shadow-sm border p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-1">
+              <i class="fas fa-binoculars mr-2 text-zanichelli-light"></i>
+              Nuovo Monitoraggio Disciplinare
+            </h3>
+            <p class="text-sm text-gray-500 mb-5">Seleziona una materia e indica i volumi Zanichelli da confrontare con i programmi dei docenti</p>
+
+            <form id="monitoraggio-form" onsubmit="handleCreateMonitoraggio(event)" class="space-y-5">
+
+              <!-- SEZIONE 1: MATERIA -->
+              <div class="space-y-4">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">1</span>
+                  <h4 class="font-semibold text-gray-800">Materia da monitorare</h4>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Materia *</label>
+                    <input type="text" id="mon-materia" required
+                           class="w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-zanichelli-light outline-none"
+                           placeholder="Es: Chimica Generale">
+                    <p class="text-xs text-gray-400 mt-1">Tutti i docenti di questa materia nel database verranno analizzati</p>
+                  </div>
+                </div>
+
+                <!-- Pannello Scenario (appare automaticamente) -->
+                <div id="mon-scenario-panel" class="hidden"></div>
+              </div>
+
+              <!-- SEZIONE 2: VOLUMI ZANICHELLI -->
+              <div class="border-t pt-5">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">2</span>
+                    <h4 class="font-semibold text-gray-800">Volumi Zanichelli da confrontare</h4>
+                    <span id="mon-volumi-count" class="text-xs text-gray-400 ml-1">1 di 5</span>
+                  </div>
+                  <button type="button" onclick="addMonitoraggioVolume()" id="btn-add-volume"
+                          class="px-3 py-1.5 bg-zanichelli-accent text-zanichelli-blue rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors flex items-center gap-1">
+                    <i class="fas fa-plus text-xs"></i>
+                    Aggiungi volume
+                  </button>
+                </div>
+                <p class="text-xs text-gray-400 mb-4">Inserisci da 1 a 5 volumi del catalogo Zanichelli. Per ciascuno, incolla l'indice o il sommario dei capitoli.</p>
+
+                <div id="mon-volumi-container" class="space-y-4">
+                  <!-- Volume 1 (sempre presente) -->
+                  <div class="mon-volume-entry bg-gray-50 rounded-xl p-4 border border-gray-200" data-volume-index="0">
+                    <div class="flex items-center justify-between mb-3">
+                      <span class="text-sm font-semibold text-gray-700">
+                        <i class="fas fa-book text-zanichelli-light mr-1"></i>Volume 1
+                      </span>
+                    </div>
+                    <div class="space-y-3">
+                      <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Titolo del volume *</label>
+                        <input type="text" class="mon-vol-titolo w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-zanichelli-light outline-none"
+                               placeholder="Es: Chimica Generale e Inorganica — Petrucci">
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Indice / Sommario dei capitoli *</label>
+                        <textarea class="mon-vol-indice w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-zanichelli-light outline-none" rows="4"
+                                  placeholder="Incolla qui l'indice del volume (capitoli principali). Necessario per l'analisi di allineamento."></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="mon-volume-limit-msg" class="hidden mt-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                  <i class="fas fa-info-circle mr-1"></i>Massimo 5 volumi per mantenere la qualita dell'analisi
+                </div>
+              </div>
+
+              <!-- SEZIONE 3: AVVIA -->
+              <div class="border-t pt-5">
+                <div class="flex items-center gap-2 mb-4">
+                  <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">3</span>
+                  <h4 class="font-semibold text-gray-800">Avvia monitoraggio</h4>
+                  <span class="text-xs text-gray-400 ml-1">L'analisi confrontera i volumi con tutti i docenti della materia</span>
+                </div>
+                <div class="flex gap-3">
+                  <button type="submit" id="btn-avvia-monitoraggio" disabled
+                          class="flex-1 py-3 bg-zanichelli-blue text-white rounded-lg font-medium hover:bg-zanichelli-dark transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-rocket"></i>
+                    Crea Monitoraggio e Avvia Analisi
+                  </button>
+                  <button type="button" onclick="hideMonitoraggioForm()"
+                          class="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                    Annulla
+                  </button>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
+        <!-- Progress generazione monitoraggio -->
+        <div id="monitoraggio-progress" class="hidden mt-6">
+          <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between mb-3">
+              <h3 id="mon-progress-title" class="font-semibold text-gray-700">Analisi in corso...</h3>
+              <span id="mon-progress-text" class="text-sm font-medium text-zanichelli-light">0/0</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div id="mon-progress-bar" class="bg-zanichelli-light h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <p id="mon-progress-detail" class="text-sm text-gray-500 mt-2"></p>
+          </div>
+        </div>
+
+        <!-- Risultati monitoraggio (nascosto) -->
+        <div id="monitoraggio-results-container" class="hidden mt-6">
+          <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-binoculars mr-2 text-zanichelli-light"></i>
+                Monitoraggio — <span id="mon-result-title"></span>
+              </h3>
+              <div class="flex items-center gap-2">
+                <button onclick="exportMonitoraggioCSV()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2">
+                  <i class="fas fa-file-csv"></i>
+                  Esporta CSV
+                </button>
+                <button onclick="closeMonitoraggioResults()" class="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors flex items-center gap-2">
+                  <i class="fas fa-times"></i>
+                  Chiudi
+                </button>
+              </div>
+            </div>
+
+            <!-- Pannello sintesi disciplinare -->
+            <div id="mon-sintesi-panel" class="hidden mb-6">
+              <div class="bg-zanichelli-accent rounded-xl p-5 border border-blue-200">
+                <h4 class="font-semibold text-zanichelli-blue mb-3">
+                  <i class="fas fa-chart-pie mr-2"></i>Sintesi Disciplinare
+                </h4>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+                  <div class="text-center p-3 bg-white rounded-lg border">
+                    <div id="mon-stat-totale" class="text-xl font-bold text-zanichelli-blue">0</div>
+                    <div class="text-xs text-gray-500 mt-0.5">Docenti totali</div>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border">
+                    <div id="mon-stat-difese" class="text-xl font-bold text-red-600">0</div>
+                    <div class="text-xs text-gray-500 mt-0.5">Difese urgenti</div>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border">
+                    <div id="mon-stat-upgrade" class="text-xl font-bold text-orange-600">0</div>
+                    <div class="text-xs text-gray-500 mt-0.5">Upgrade possibili</div>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border">
+                    <div id="mon-stat-conquiste" class="text-xl font-bold text-green-600">0</div>
+                    <div class="text-xs text-gray-500 mt-0.5">Conquiste possibili</div>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border">
+                    <div id="mon-stat-nonvalutati" class="text-xl font-bold text-gray-400">0</div>
+                    <div class="text-xs text-gray-500 mt-0.5">Non valutati</div>
+                  </div>
+                </div>
+                <div id="mon-nota-strategica" class="text-sm text-zanichelli-blue/80 italic"></div>
+              </div>
+            </div>
+
+            <!-- Tabella target monitoraggio -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-gray-600 text-left">
+                  <tr>
+                    <th class="px-4 py-3 font-medium w-8">#</th>
+                    <th class="px-4 py-3 font-medium">Docente</th>
+                    <th class="px-4 py-3 font-medium">Ateneo</th>
+                    <th class="px-4 py-3 font-medium">Scenario</th>
+                    <th class="px-4 py-3 font-medium" id="mon-col-volume">Volume consigliato</th>
+                    <th class="px-4 py-3 font-medium">Azione</th>
+                    <th class="px-4 py-3 font-medium">Urgenza</th>
+                    <th class="px-4 py-3 font-medium">Motivazione</th>
+                    <th class="px-4 py-3 font-medium text-center">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody id="mon-target-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ===================== SEZIONE ARCHIVIO ADOZIONI ===================== -->
       <section id="section-archivio" class="section hidden">
         <div class="mb-6 flex items-center justify-between">
@@ -1535,6 +1755,7 @@ function dashboardPage(): string {
   <script src="/static/js/database.js"></script>
   <script src="/static/js/archivio.js"></script>
   <script src="/static/js/campagna.js"></script>
+  <script src="/static/js/monitoraggio.js"></script>
   <script src="/static/js/staging.js"></script>
   <script src="/static/js/gestione.js"></script>
   <script src="/static/js/sync.js"></script>

@@ -108,6 +108,7 @@ function navigateTo(section) {
   if (section === 'archivio') loadArchivio();
   if (section === 'impostazioni') loadSettings();
   if (section === 'gestione') loadGestione();
+  if (section === 'monitoraggio') loadMonitoraggi();
 }
 
 function toggleSidebar() {
