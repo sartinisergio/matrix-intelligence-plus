@@ -290,15 +290,6 @@ async function showNewAnalisiForm() {
   document.getElementById('analisi-volumi-section').classList.add('hidden');
   document.getElementById('analisi-volumi-container').innerHTML = '';
   document.getElementById('analisi-docenti-count').classList.add('hidden');
-  // Reset volume manuale
-  const volManuale = document.getElementById('analisi-volume-manuale');
-  if (volManuale) volManuale.classList.add('hidden');
-  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo');
-  if (volManTitolo) volManTitolo.value = '';
-  const volManAutore = document.getElementById('analisi-vol-manuale-autore');
-  if (volManAutore) volManAutore.value = '';
-  const volManIndice = document.getElementById('analisi-vol-manuale-indice');
-  if (volManIndice) volManIndice.value = '';
   const etichettaEl = document.getElementById('analisi-etichetta');
   if (etichettaEl) etichettaEl.value = '';
   validateAnalisiForm();
@@ -308,31 +299,6 @@ function hideAnalisiForm() {
   document.getElementById('analisi-form-container').classList.add('hidden');
   document.getElementById('btn-new-analisi').classList.remove('hidden');
   document.getElementById('analisi-list').classList.remove('hidden');
-}
-
-// ===================================================
-// TOGGLE VOLUME MANUALE (novita non in catalogo)
-// ===================================================
-
-function toggleVolumeManuale() {
-  const container = document.getElementById('analisi-volume-manuale');
-  if (!container) return;
-  const isHidden = container.classList.contains('hidden');
-  container.classList.toggle('hidden');
-
-  if (isHidden) {
-    // Quando si apre il volume manuale, deseleziona i volumi dal catalogo
-    document.querySelectorAll('input[name="analisi-vol"]:checked').forEach(cb => { cb.checked = false; });
-  } else {
-    // Quando si chiude, svuota i campi
-    const t = document.getElementById('analisi-vol-manuale-titolo');
-    if (t) t.value = '';
-    const a = document.getElementById('analisi-vol-manuale-autore');
-    if (a) a.value = '';
-    const i = document.getElementById('analisi-vol-manuale-indice');
-    if (i) i.value = '';
-  }
-  validateAnalisiForm();
 }
 
 // ===================================================
@@ -413,7 +379,19 @@ async function onAnalisiMateriaChange() {
         </details>` : '<div class="text-xs text-amber-500 mt-1"><i class="fas fa-exclamation-circle mr-1"></i>Indice non disponibile nel catalogo</div>'}
       </div>
     </label>
-  `).join('');
+  `).join('') + `
+    <label class="analisi-volume-checkbox flex items-start gap-3 bg-amber-50 rounded-xl p-4 border-2 border-dashed border-amber-300 cursor-pointer hover:bg-amber-100/50 hover:border-amber-400 transition-colors"
+           data-manual-id="__novita__">
+      <input type="checkbox" name="analisi-vol" value="__novita__" onchange="validateAnalisiForm()"
+             class="mt-1 w-4 h-4 text-amber-500 rounded focus:ring-amber-300">
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-amber-800 text-sm"><i class="fas fa-star mr-1"></i>Volume non ancora disponibile (novita)</span>
+        </div>
+        <div class="text-xs text-amber-600 mt-0.5">Il nuovo volume non e ancora in catalogo. L'analisi partira come <strong>pre-valutazione</strong>: verranno analizzati i programmi dei docenti e identificate le leve per il cambio. Potrai completare l'analisi quando avrai l'indice del volume.</div>
+      </div>
+    </label>
+  `;
 
   validateAnalisiForm();
 }
@@ -427,25 +405,20 @@ function validateAnalisiForm() {
   const btn = document.getElementById('btn-avvia-analisi');
   if (!btn) return;
 
-  // Controlla volume manuale
-  const volManualeContainer = document.getElementById('analisi-volume-manuale');
-  const isVolumeManuale = volManualeContainer && !volManualeContainer.classList.contains('hidden');
-  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo')?.value?.trim() || '';
-  const volManAutore = document.getElementById('analisi-vol-manuale-autore')?.value?.trim() || '';
-  const hasVolumeManuale = isVolumeManuale && volManTitolo.length > 0 && volManAutore.length > 0;
-
-  // Almeno una checkbox volume selezionata OPPURE volume manuale compilato
+  // Checkbox selezionate (inclusa eventuale __novita__)
   const checked = document.querySelectorAll('input[name="analisi-vol"]:checked');
-  const totalSelected = checked.length + (hasVolumeManuale ? 1 : 0);
+  const hasNovita = Array.from(checked).some(cb => cb.value === '__novita__');
+  const catalogChecked = Array.from(checked).filter(cb => cb.value !== '__novita__');
+  const totalSelected = checked.length;
   const isValid = materia && totalSelected > 0 && totalSelected <= 5;
   btn.disabled = !isValid;
 
   // Aggiorna contatore
   const countEl = document.getElementById('analisi-volumi-count');
   if (countEl && materia) {
-    const total = document.querySelectorAll('input[name="analisi-vol"]').length;
-    const manLabel = hasVolumeManuale ? ' + 1 manuale' : '';
-    countEl.textContent = `${checked.length} selezionat${checked.length === 1 ? 'o' : 'i'} su ${total}${manLabel}`;
+    const total = document.querySelectorAll('input[name="analisi-vol"]').length - 1; // -1 per novita
+    const novLabel = hasNovita ? ' + novita' : '';
+    countEl.textContent = `${catalogChecked.length} selezionat${catalogChecked.length === 1 ? 'o' : 'i'} su ${total}${novLabel}`;
   }
 
   // Aggiorna badge tipo analisi e label pulsante
@@ -457,25 +430,36 @@ function validateAnalisiForm() {
     if (tipoBadge) { tipoBadge.classList.add('hidden'); tipoBadge.innerHTML = ''; }
     if (tipoLabel) tipoLabel.textContent = '';
     if (btnLabel) btnLabel.textContent = 'Crea Analisi e Avvia';
-  } else if (totalSelected === 1) {
-    const isManuale = hasVolumeManuale && checked.length === 0;
+  } else if (totalSelected === 1 && hasNovita) {
+    // Solo novita selezionata → pre-valutazione pura
     if (tipoBadge) {
       tipoBadge.classList.remove('hidden');
       tipoBadge.innerHTML = `
-        <div class="px-3 py-2 ${isManuale ? 'bg-amber-50 border border-amber-200' : 'bg-blue-50 border border-blue-200'} rounded-lg text-sm ${isManuale ? 'text-amber-700' : 'text-blue-700'}">
-          <i class="fas fa-bullseye mr-1"></i>
-          <strong>Campagna novita${isManuale ? ' (pre-valutazione)' : ''}</strong> — ${isManuale ? 'volume inserito manualmente: l\'analisi partira come pre-valutazione.' : 'analisi di mercato per un singolo volume: matching docenti, rilevanza e motivazioni personalizzate.'}
+        <div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <i class="fas fa-star mr-1"></i>
+          <strong>Pre-valutazione novita</strong> — il volume non e ancora disponibile. Verranno analizzati i programmi dei docenti per identificare gap, leve e opportunita. Potrai completare l'analisi quando avrai l'indice.
         </div>`;
     }
-    if (tipoLabel) tipoLabel.textContent = `Tipo: Campagna novita (1 volume${isManuale ? ' manuale' : ''})`;
-    if (btnLabel) btnLabel.textContent = isManuale ? 'Crea Pre-valutazione e Genera Target' : 'Crea Campagna e Genera Target';
+    if (tipoLabel) tipoLabel.textContent = 'Tipo: Pre-valutazione novita';
+    if (btnLabel) btnLabel.textContent = 'Crea Pre-valutazione e Genera Target';
+  } else if (totalSelected === 1) {
+    if (tipoBadge) {
+      tipoBadge.classList.remove('hidden');
+      tipoBadge.innerHTML = `
+        <div class="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          <i class="fas fa-bullseye mr-1"></i>
+          <strong>Campagna novita</strong> — analisi di mercato per un singolo volume: matching docenti, rilevanza e motivazioni personalizzate.
+        </div>`;
+    }
+    if (tipoLabel) tipoLabel.textContent = 'Tipo: Campagna novita (1 volume)';
+    if (btnLabel) btnLabel.textContent = 'Crea Campagna e Genera Target';
   } else {
     if (tipoBadge) {
       tipoBadge.classList.remove('hidden');
       tipoBadge.innerHTML = `
         <div class="px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
           <i class="fas fa-binoculars mr-1"></i>
-          <strong>Monitoraggio disciplinare</strong> — analisi strategica confrontando ${totalSelected} volumi Zanichelli con tutti i docenti della materia.
+          <strong>Monitoraggio disciplinare</strong> — analisi strategica confrontando ${totalSelected}${hasNovita ? ' (incl. novita)' : ''} volumi Zanichelli con tutti i docenti della materia.
         </div>`;
     }
     if (tipoLabel) tipoLabel.textContent = `Tipo: Monitoraggio disciplinare (${checked.length} volumi)`;
@@ -504,20 +488,15 @@ async function handleCreateAnalisi(event) {
 
   const etichetta = document.getElementById('analisi-etichetta')?.value?.trim() || '';
 
-  // Controlla volume manuale
-  const volManualeContainer = document.getElementById('analisi-volume-manuale');
-  const isVolumeManuale = volManualeContainer && !volManualeContainer.classList.contains('hidden');
-  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo')?.value?.trim() || '';
-  const volManAutore = document.getElementById('analisi-vol-manuale-autore')?.value?.trim() || '';
-  const volManIndice = document.getElementById('analisi-vol-manuale-indice')?.value?.trim() || '';
-
-  // Raccogli volumi selezionati dal catalogo
+  // Raccogli volumi selezionati (checkbox)
   const checkedBoxes = document.querySelectorAll('input[name="analisi-vol"]:checked');
+  const hasNovita = Array.from(checkedBoxes).some(cb => cb.value === '__novita__');
 
   const volumi = [];
 
   // Aggiungi volumi dal catalogo
   checkedBoxes.forEach(cb => {
+    if (cb.value === '__novita__') return; // gestito sotto
     const manual = catalogManuals.find(m => m.id === cb.value);
     if (manual) {
       volumi.push({
@@ -533,23 +512,23 @@ async function handleCreateAnalisi(event) {
     }
   });
 
-  // Aggiungi volume manuale (se compilato)
-  if (isVolumeManuale && volManTitolo && volManAutore) {
+  // Se selezionato "Volume non ancora disponibile" → volume novita placeholder
+  if (hasNovita) {
     volumi.push({
-      id: 'manuale_' + Date.now(),
-      titolo: volManTitolo,
-      autore: volManAutore,
+      id: 'novita_' + Date.now(),
+      titolo: 'Volume novita — ' + materia,
+      autore: '',
       editore: 'Zanichelli',
       materia: materia,
-      indice: volManIndice || '',
+      indice: '',
       chapters_count: 0,
       temi: [],
-      is_manuale: true // flag per identificare volume inserito manualmente
+      is_novita: true
     });
   }
 
   if (volumi.length === 0) {
-    showToast('Seleziona almeno un volume o inserisci un volume manualmente', 'warning');
+    showToast('Seleziona almeno un volume', 'warning');
     return;
   }
   if (volumi.length > 5) {
@@ -569,10 +548,15 @@ async function handleCreateAnalisi(event) {
 
 // --- Crea analisi di tipo Campagna (1 volume) ---
 async function createAnalisiCampagna(session, materia, etichetta, volume) {
+  const isNovita = !!volume.is_novita;
+  const titolo = isNovita
+    ? (etichetta ? `Novita: ${materia} — ${etichetta}` : `Novita: ${materia}`)
+    : volume.titolo;
+
   const campaign = {
     user_id: session.user.id,
-    libro_titolo: volume.titolo,
-    libro_autore: volume.autore,
+    libro_titolo: titolo,
+    libro_autore: volume.autore || '',
     libro_editore: volume.editore || 'Zanichelli',
     libro_materia: materia,
     libro_indice: volume.indice || null,
@@ -584,11 +568,14 @@ async function createAnalisiCampagna(session, materia, etichetta, volume) {
     const { data, error } = await supabaseClient.from('campagne').insert(campaign).select().single();
     if (error) throw error;
 
-    showToast(`Campagna "${volume.titolo}" creata! Generazione target in corso...`, 'success');
+    const progressLabel = isNovita
+      ? `Pre-valutazione novita: ${materia}`
+      : `Campagna novita: ${volume.titolo}`;
+    showToast(`${isNovita ? 'Pre-valutazione' : 'Campagna'} "${titolo}" creata! Generazione target in corso...`, 'success');
     hideAnalisiForm();
 
     // Mostra barra di progresso nella sezione Analisi
-    showAnalisiProgress(`Campagna novita: ${volume.titolo}`);
+    showAnalisiProgress(progressLabel);
     updateAnalisiProgress(0, 1, 'Generazione target in corso — analisi dei programmi...');
 
     // Genera i target (delega a campagna.js)
