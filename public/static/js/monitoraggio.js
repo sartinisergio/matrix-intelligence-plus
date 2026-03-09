@@ -734,6 +734,14 @@ async function generaTargetMonitoraggio(monitoraggioId) {
           const result = await generaMatchingMultiVolume(prog, volumi, framework);
           completed++;
           updateMonProgress(completed, matchingPrograms.length, `Analizzato: ${prog.docente_nome || 'Docente ' + completed}`);
+
+          // Determina manuale principale dal DB
+          const manualiDB = prog.manuali_citati || [];
+          const principaleDB = manualiDB.find(m => m.ruolo === 'principale');
+          // Fallback: se nessuno ha ruolo 'principale', prendi il primo
+          const manualePrimario = principaleDB || manualiDB[0] || {};
+          console.log(`[Monitoraggio DEBUG] ${prog.docente_nome}: manuali_citati=${JSON.stringify(manualiDB)}, principale=${JSON.stringify(manualePrimario)}`);
+
           return {
             programma_id: prog.id,
             docente_nome: prog.docente_nome || '',
@@ -743,9 +751,9 @@ async function generaTargetMonitoraggio(monitoraggioId) {
             materia_inferita: prog.materia_inferita || '',
             scenario: prog.scenario_zanichelli || 'Non classificato',
             scenario_zanichelli: prog.scenario_zanichelli || 'Non classificato',
-            manuale_principale: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.titolo || '',
-            manuale_principale_autore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.autore || '',
-            manuale_principale_editore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.editore || '',
+            manuale_principale: manualePrimario.titolo || '',
+            manuale_principale_autore: manualePrimario.autore || '',
+            manuale_principale_editore: manualePrimario.editore || '',
             volume_ottimale: result.volume_ottimale || '',
             volume_ottimale_autore: result.volume_ottimale_autore || '',
             volume_consigliato: result.volume_ottimale || '',
@@ -760,6 +768,8 @@ async function generaTargetMonitoraggio(monitoraggioId) {
           completed++;
           updateMonProgress(completed, matchingPrograms.length, `Errore per: ${prog.docente_nome || 'Docente'}`);
           console.error(`[Monitoraggio] Errore analisi ${prog.docente_nome}:`, e);
+          const manualiDB_err = prog.manuali_citati || [];
+          const principaleDB_err = manualiDB_err.find(m => m.ruolo === 'principale') || manualiDB_err[0] || {};
           return {
             programma_id: prog.id,
             docente_nome: prog.docente_nome || '',
@@ -769,9 +779,9 @@ async function generaTargetMonitoraggio(monitoraggioId) {
             materia_inferita: prog.materia_inferita || '',
             scenario: prog.scenario_zanichelli || 'Non classificato',
             scenario_zanichelli: prog.scenario_zanichelli || 'Non classificato',
-            manuale_principale: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.titolo || '',
-            manuale_principale_autore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.autore || '',
-            manuale_principale_editore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.editore || '',
+            manuale_principale: principaleDB_err.titolo || '',
+            manuale_principale_autore: principaleDB_err.autore || '',
+            manuale_principale_editore: principaleDB_err.editore || '',
             volume_ottimale: '',
             volume_consigliato: '',
             motivazione_scelta: '',
@@ -823,6 +833,8 @@ async function generaTargetMonitoraggio(monitoraggioId) {
 
         if (!match) {
           console.warn(`[Monitoraggio] Priorita: nessun match per "${p.docente}" (${p.ateneo}) — dati cattedra persi`);
+        } else {
+          console.log(`[Monitoraggio MERGE] "${p.docente}" → match="${match.docente_nome}", manuale_principale="${match.manuale_principale}", editore="${match.manuale_principale_editore}"`);
         }
 
         return {
@@ -870,6 +882,11 @@ async function generaTargetMonitoraggio(monitoraggioId) {
     }
 
     // 8. Salva tutto in Supabase
+    // DEBUG: log dati finali per ogni target
+    targets.forEach(t => {
+      console.log(`[Monitoraggio SAVE] ${t.docente_nome}: manuale="${t.manuale_principale}" autore="${t.manuale_principale_autore}" editore="${t.manuale_principale_editore}"`);
+    });
+
     const sintesi = prioritaData?.sintesi_disciplina || {
       totale_docenti: targets.length,
       difese_urgenti: targets.filter(t => t.tipo_azione === 'DIFESA').length,
