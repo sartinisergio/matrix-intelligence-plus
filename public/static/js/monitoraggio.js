@@ -540,7 +540,14 @@ function renderMonitoraggioTargets(targets, showVolumeColumn) {
           ${t.ateneo || '—'}
           ${t.classe_laurea ? `<div class="text-xs text-gray-400">${t.classe_laurea}</div>` : ''}
         </td>
-        <td class="px-4 py-3">${scenarioBadge(t.scenario)}</td>
+        <td class="px-4 py-3 text-sm">
+          ${t.manuale_principale
+            ? `<div class="font-medium text-gray-800">${truncate(t.manuale_principale, 40)}</div>
+               ${t.manuale_principale_autore ? `<div class="text-xs text-gray-400">${t.manuale_principale_autore}</div>` : ''}
+               ${t.manuale_principale_editore ? `<div class="text-xs text-gray-400">${t.manuale_principale_editore}</div>` : ''}`
+            : `<span class="text-gray-400 italic text-xs">Non identificato</span>`}
+          <div class="mt-0.5">${scenarioBadge(t.scenario)}</div>
+        </td>
         ${volumeCell}
         <td class="px-4 py-3">${monitoraggioAzioneBadge(t.tipo_azione)}</td>
         <td class="px-4 py-3">${monitoraggioUrgenzaBadge(t.urgenza)}</td>
@@ -737,6 +744,8 @@ async function generaTargetMonitoraggio(monitoraggioId) {
             scenario: prog.scenario_zanichelli || 'Non classificato',
             scenario_zanichelli: prog.scenario_zanichelli || 'Non classificato',
             manuale_principale: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.titolo || '',
+            manuale_principale_autore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.autore || '',
+            manuale_principale_editore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.editore || '',
             volume_ottimale: result.volume_ottimale || '',
             volume_ottimale_autore: result.volume_ottimale_autore || '',
             volume_consigliato: result.volume_ottimale || '',
@@ -761,6 +770,8 @@ async function generaTargetMonitoraggio(monitoraggioId) {
             scenario: prog.scenario_zanichelli || 'Non classificato',
             scenario_zanichelli: prog.scenario_zanichelli || 'Non classificato',
             manuale_principale: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.titolo || '',
+            manuale_principale_autore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.autore || '',
+            manuale_principale_editore: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.editore || '',
             volume_ottimale: '',
             volume_consigliato: '',
             motivazione_scelta: '',
@@ -1091,7 +1102,7 @@ function exportMonitoraggioCSV() {
   const showVolume = volumi.length > 1;
 
   // Header
-  let headers = ['#', 'Docente', 'Email', 'Ateneo', 'Classe', 'Scenario'];
+  let headers = ['#', 'Docente', 'Email', 'Ateneo', 'Classe', 'Manuale adottato', 'Autore manuale', 'Editore', 'Scenario'];
   if (showVolume) headers.push('Volume consigliato');
   headers.push('Azione', 'Urgenza', 'Motivazione');
 
@@ -1103,6 +1114,9 @@ function exportMonitoraggioCSV() {
       t.docente_email || '',
       t.ateneo || '',
       t.classe_laurea || '',
+      t.manuale_principale || '',
+      t.manuale_principale_autore || '',
+      t.manuale_principale_editore || '',
       t.scenario || ''
     ];
     if (showVolume) row.push(t.volume_consigliato || '');

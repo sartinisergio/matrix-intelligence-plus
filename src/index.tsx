@@ -951,6 +951,42 @@ function dashboardPage(): string {
                 <div id="analisi-no-volumi-msg" class="hidden mt-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
                   <i class="fas fa-exclamation-triangle mr-1"></i>Nessun volume Zanichelli trovato nel catalogo per questa materia
                 </div>
+
+                <!-- Opzione volume manuale (novita non ancora in catalogo) -->
+                <div class="mt-4 border-t pt-4">
+                  <button type="button" onclick="toggleVolumeManuale()" id="btn-volume-manuale"
+                          class="text-sm text-zanichelli-light hover:text-zanichelli-dark flex items-center gap-1.5 transition-colors">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Novita non ancora in catalogo? Inserisci manualmente</span>
+                  </button>
+                  <div id="analisi-volume-manuale" class="hidden mt-3 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center gap-2 mb-1">
+                      <i class="fas fa-edit text-amber-600"></i>
+                      <span class="text-sm font-medium text-amber-800">Volume manuale (pre-valutazione)</span>
+                    </div>
+                    <p class="text-xs text-amber-600">Il volume non e ancora nel catalogo. Inserisci i dati disponibili: l'analisi partira come pre-valutazione. Potrai completarla aggiungendo l'indice in seguito.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Titolo volume *</label>
+                        <input type="text" id="analisi-vol-manuale-titolo"
+                               class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-300 outline-none"
+                               placeholder="Es: Economia Politica" onchange="validateAnalisiForm()">
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Autore/i *</label>
+                        <input type="text" id="analisi-vol-manuale-autore"
+                               class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-300 outline-none"
+                               placeholder="Es: Rossi M., Bianchi G." onchange="validateAnalisiForm()">
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">Indice / Sommario (opzionale — se disponibile)</label>
+                      <textarea id="analisi-vol-manuale-indice" rows="3"
+                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-300 outline-none resize-y"
+                                placeholder="Incolla qui l'indice del volume se lo hai gia disponibile..."></textarea>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- STEP 3: AVVIA -->
@@ -1438,7 +1474,7 @@ function dashboardPage(): string {
                     <th class="px-4 py-3 font-medium w-8">#</th>
                     <th class="px-4 py-3 font-medium">Docente</th>
                     <th class="px-4 py-3 font-medium">Ateneo</th>
-                    <th class="px-4 py-3 font-medium">Scenario</th>
+                    <th class="px-4 py-3 font-medium">Manuale adottato</th>
                     <th class="px-4 py-3 font-medium" id="mon-col-volume">Volume consigliato</th>
                     <th class="px-4 py-3 font-medium">Azione</th>
                     <th class="px-4 py-3 font-medium">Urgenza</th>

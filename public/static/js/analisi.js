@@ -290,6 +290,15 @@ async function showNewAnalisiForm() {
   document.getElementById('analisi-volumi-section').classList.add('hidden');
   document.getElementById('analisi-volumi-container').innerHTML = '';
   document.getElementById('analisi-docenti-count').classList.add('hidden');
+  // Reset volume manuale
+  const volManuale = document.getElementById('analisi-volume-manuale');
+  if (volManuale) volManuale.classList.add('hidden');
+  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo');
+  if (volManTitolo) volManTitolo.value = '';
+  const volManAutore = document.getElementById('analisi-vol-manuale-autore');
+  if (volManAutore) volManAutore.value = '';
+  const volManIndice = document.getElementById('analisi-vol-manuale-indice');
+  if (volManIndice) volManIndice.value = '';
   const etichettaEl = document.getElementById('analisi-etichetta');
   if (etichettaEl) etichettaEl.value = '';
   validateAnalisiForm();
@@ -299,6 +308,31 @@ function hideAnalisiForm() {
   document.getElementById('analisi-form-container').classList.add('hidden');
   document.getElementById('btn-new-analisi').classList.remove('hidden');
   document.getElementById('analisi-list').classList.remove('hidden');
+}
+
+// ===================================================
+// TOGGLE VOLUME MANUALE (novita non in catalogo)
+// ===================================================
+
+function toggleVolumeManuale() {
+  const container = document.getElementById('analisi-volume-manuale');
+  if (!container) return;
+  const isHidden = container.classList.contains('hidden');
+  container.classList.toggle('hidden');
+
+  if (isHidden) {
+    // Quando si apre il volume manuale, deseleziona i volumi dal catalogo
+    document.querySelectorAll('input[name="analisi-vol"]:checked').forEach(cb => { cb.checked = false; });
+  } else {
+    // Quando si chiude, svuota i campi
+    const t = document.getElementById('analisi-vol-manuale-titolo');
+    if (t) t.value = '';
+    const a = document.getElementById('analisi-vol-manuale-autore');
+    if (a) a.value = '';
+    const i = document.getElementById('analisi-vol-manuale-indice');
+    if (i) i.value = '';
+  }
+  validateAnalisiForm();
 }
 
 // ===================================================
@@ -393,16 +427,25 @@ function validateAnalisiForm() {
   const btn = document.getElementById('btn-avvia-analisi');
   if (!btn) return;
 
-  // Almeno una checkbox volume selezionata
+  // Controlla volume manuale
+  const volManualeContainer = document.getElementById('analisi-volume-manuale');
+  const isVolumeManuale = volManualeContainer && !volManualeContainer.classList.contains('hidden');
+  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo')?.value?.trim() || '';
+  const volManAutore = document.getElementById('analisi-vol-manuale-autore')?.value?.trim() || '';
+  const hasVolumeManuale = isVolumeManuale && volManTitolo.length > 0 && volManAutore.length > 0;
+
+  // Almeno una checkbox volume selezionata OPPURE volume manuale compilato
   const checked = document.querySelectorAll('input[name="analisi-vol"]:checked');
-  const isValid = materia && checked.length > 0 && checked.length <= 5;
+  const totalSelected = checked.length + (hasVolumeManuale ? 1 : 0);
+  const isValid = materia && totalSelected > 0 && totalSelected <= 5;
   btn.disabled = !isValid;
 
   // Aggiorna contatore
   const countEl = document.getElementById('analisi-volumi-count');
   if (countEl && materia) {
     const total = document.querySelectorAll('input[name="analisi-vol"]').length;
-    countEl.textContent = `${checked.length} selezionat${checked.length === 1 ? 'o' : 'i'} su ${total}`;
+    const manLabel = hasVolumeManuale ? ' + 1 manuale' : '';
+    countEl.textContent = `${checked.length} selezionat${checked.length === 1 ? 'o' : 'i'} su ${total}${manLabel}`;
   }
 
   // Aggiorna badge tipo analisi e label pulsante
@@ -410,28 +453,29 @@ function validateAnalisiForm() {
   const tipoLabel = document.getElementById('analisi-tipo-label');
   const btnLabel = document.getElementById('btn-avvia-analisi-label');
 
-  if (checked.length === 0) {
+  if (totalSelected === 0) {
     if (tipoBadge) { tipoBadge.classList.add('hidden'); tipoBadge.innerHTML = ''; }
     if (tipoLabel) tipoLabel.textContent = '';
     if (btnLabel) btnLabel.textContent = 'Crea Analisi e Avvia';
-  } else if (checked.length === 1) {
+  } else if (totalSelected === 1) {
+    const isManuale = hasVolumeManuale && checked.length === 0;
     if (tipoBadge) {
       tipoBadge.classList.remove('hidden');
       tipoBadge.innerHTML = `
-        <div class="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+        <div class="px-3 py-2 ${isManuale ? 'bg-amber-50 border border-amber-200' : 'bg-blue-50 border border-blue-200'} rounded-lg text-sm ${isManuale ? 'text-amber-700' : 'text-blue-700'}">
           <i class="fas fa-bullseye mr-1"></i>
-          <strong>Campagna novita</strong> — analisi di mercato per un singolo volume: matching docenti, rilevanza e motivazioni personalizzate.
+          <strong>Campagna novita${isManuale ? ' (pre-valutazione)' : ''}</strong> — ${isManuale ? 'volume inserito manualmente: l\'analisi partira come pre-valutazione.' : 'analisi di mercato per un singolo volume: matching docenti, rilevanza e motivazioni personalizzate.'}
         </div>`;
     }
-    if (tipoLabel) tipoLabel.textContent = 'Tipo: Campagna novita (1 volume)';
-    if (btnLabel) btnLabel.textContent = 'Crea Campagna e Genera Target';
+    if (tipoLabel) tipoLabel.textContent = `Tipo: Campagna novita (1 volume${isManuale ? ' manuale' : ''})`;
+    if (btnLabel) btnLabel.textContent = isManuale ? 'Crea Pre-valutazione e Genera Target' : 'Crea Campagna e Genera Target';
   } else {
     if (tipoBadge) {
       tipoBadge.classList.remove('hidden');
       tipoBadge.innerHTML = `
         <div class="px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
           <i class="fas fa-binoculars mr-1"></i>
-          <strong>Monitoraggio disciplinare</strong> — analisi strategica confrontando ${checked.length} volumi Zanichelli con tutti i docenti della materia.
+          <strong>Monitoraggio disciplinare</strong> — analisi strategica confrontando ${totalSelected} volumi Zanichelli con tutti i docenti della materia.
         </div>`;
     }
     if (tipoLabel) tipoLabel.textContent = `Tipo: Monitoraggio disciplinare (${checked.length} volumi)`;
@@ -460,18 +504,19 @@ async function handleCreateAnalisi(event) {
 
   const etichetta = document.getElementById('analisi-etichetta')?.value?.trim() || '';
 
-  // Raccogli volumi selezionati
+  // Controlla volume manuale
+  const volManualeContainer = document.getElementById('analisi-volume-manuale');
+  const isVolumeManuale = volManualeContainer && !volManualeContainer.classList.contains('hidden');
+  const volManTitolo = document.getElementById('analisi-vol-manuale-titolo')?.value?.trim() || '';
+  const volManAutore = document.getElementById('analisi-vol-manuale-autore')?.value?.trim() || '';
+  const volManIndice = document.getElementById('analisi-vol-manuale-indice')?.value?.trim() || '';
+
+  // Raccogli volumi selezionati dal catalogo
   const checkedBoxes = document.querySelectorAll('input[name="analisi-vol"]:checked');
-  if (checkedBoxes.length === 0) {
-    showToast('Seleziona almeno un volume Zanichelli', 'warning');
-    return;
-  }
-  if (checkedBoxes.length > 5) {
-    showToast('Massimo 5 volumi consentiti', 'warning');
-    return;
-  }
 
   const volumi = [];
+
+  // Aggiungi volumi dal catalogo
   checkedBoxes.forEach(cb => {
     const manual = catalogManuals.find(m => m.id === cb.value);
     if (manual) {
@@ -488,8 +533,27 @@ async function handleCreateAnalisi(event) {
     }
   });
 
+  // Aggiungi volume manuale (se compilato)
+  if (isVolumeManuale && volManTitolo && volManAutore) {
+    volumi.push({
+      id: 'manuale_' + Date.now(),
+      titolo: volManTitolo,
+      autore: volManAutore,
+      editore: 'Zanichelli',
+      materia: materia,
+      indice: volManIndice || '',
+      chapters_count: 0,
+      temi: [],
+      is_manuale: true // flag per identificare volume inserito manualmente
+    });
+  }
+
   if (volumi.length === 0) {
-    showToast('Errore nel recupero dei volumi dal catalogo', 'error');
+    showToast('Seleziona almeno un volume o inserisci un volume manualmente', 'warning');
+    return;
+  }
+  if (volumi.length > 5) {
+    showToast('Massimo 5 volumi consentiti', 'warning');
     return;
   }
 
