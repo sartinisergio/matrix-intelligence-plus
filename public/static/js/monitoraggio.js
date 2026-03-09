@@ -804,22 +804,45 @@ async function generaTargetMonitoraggio(monitoraggioId) {
     let targets;
     if (prioritaData && prioritaData.lista_priorita) {
       targets = prioritaData.lista_priorita.map(p => {
-        // Cerca il risultato corrispondente
-        const match = allResults.find(r =>
-          r.docente_nome && p.docente &&
-          r.docente_nome.toLowerCase().includes(p.docente.toLowerCase().split(' ')[0])
-        ) || allResults.find(r => r.ateneo && p.ateneo && r.ateneo.toLowerCase() === p.ateneo.toLowerCase());
+        // Cerca il risultato corrispondente (match robusto per nome)
+        const pName = (p.docente || '').toLowerCase().trim();
+        const match = allResults.find(r => {
+          const rName = (r.docente_nome || '').toLowerCase().trim();
+          if (!rName || !pName) return false;
+          // Match esatto
+          if (rName === pName) return true;
+          // Match parziale: ogni parola del nome LLM deve comparire nel nome originale (o viceversa)
+          const pWords = pName.split(/\s+/).filter(w => w.length > 2);
+          const rWords = rName.split(/\s+/).filter(w => w.length > 2);
+          const pInR = pWords.every(w => rWords.some(rw => rw.includes(w) || w.includes(rw)));
+          const rInP = rWords.every(w => pWords.some(pw => pw.includes(w) || w.includes(pw)));
+          return pInR || rInP;
+        }) || allResults.find(r => 
+          r.ateneo && p.ateneo && r.ateneo.toLowerCase() === p.ateneo.toLowerCase()
+        );
+
+        if (!match) {
+          console.warn(`[Monitoraggio] Priorita: nessun match per "${p.docente}" (${p.ateneo}) — dati cattedra persi`);
+        }
 
         return {
           ...(match || {}),
-          docente_nome: p.docente || match?.docente_nome || '',
-          ateneo: p.ateneo || match?.ateneo || '',
+          docente_nome: match?.docente_nome || p.docente || '',
+          docente_email: match?.docente_email || '',
+          ateneo: match?.ateneo || p.ateneo || '',
+          classe_laurea: match?.classe_laurea || '',
           tipo_azione: p.tipo_azione || 'DA VERIFICARE',
           urgenza: p.urgenza || 'BASSA',
           volume_consigliato: p.volume_consigliato || match?.volume_consigliato || '',
           volume_consigliato_autore: p.volume_consigliato_autore || match?.volume_ottimale_autore || '',
           motivazione_scelta: p.motivazione || match?.motivazione_scelta || '',
-          scenario: p.scenario_attuale || match?.scenario || 'Non classificato'
+          scenario: match?.scenario || p.scenario_attuale || 'Non classificato',
+          // Preserva sempre i dati della cattedra dal match (non sovrascrivere con LLM prioritizzazione)
+          manuale_principale: match?.manuale_principale || '',
+          manuale_principale_autore: match?.manuale_principale_autore || '',
+          manuale_principale_editore: match?.manuale_principale_editore || '',
+          analisi_cattedra: match?.analisi_cattedra || {},
+          valutazioni_volumi: match?.valutazioni_volumi || []
         };
       });
 
