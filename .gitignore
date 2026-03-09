@@ -7,3 +7,4 @@ dist/
 *.log
 .pm2/
 pids/
+.github/
