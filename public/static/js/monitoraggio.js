@@ -409,6 +409,14 @@ function viewMonitoraggioTargets(monitoraggioId) {
 }
 
 function closeMonitoraggioResults() {
+  // Se siamo arrivati qui dal flusso Analisi, torna a quella sezione
+  if (typeof closeAnalisiMonitoraggioResults === 'function') {
+    currentMonitoraggioId = null;
+    currentMonTargets = [];
+    closeAnalisiMonitoraggioResults();
+    return;
+  }
+  // Fallback: comportamento originale
   document.getElementById('monitoraggio-results-container').classList.add('hidden');
   document.getElementById('monitoraggi-list').classList.remove('hidden');
   document.getElementById('btn-new-monitoraggio').classList.remove('hidden');

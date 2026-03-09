@@ -601,13 +601,19 @@ function dashboardPage(): string {
         <i class="fas fa-database w-5 text-center"></i>
         <span>Database Programmi</span>
       </button>
-      <button onclick="navigateTo('campagne')" id="nav-campagne"
+      <button onclick="navigateTo('analisi')" id="nav-analisi"
               class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200">
+        <i class="fas fa-microscope w-5 text-center"></i>
+        <span>Analisi</span>
+      </button>
+      <!-- Campagne e Monitoraggio: nascosti dalla nav, sezioni HTML mantenute per compatibilita -->
+      <button onclick="navigateTo('campagne')" id="nav-campagne"
+              class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200 hidden">
         <i class="fas fa-bullseye w-5 text-center"></i>
         <span>Campagne</span>
       </button>
       <button onclick="navigateTo('monitoraggio')" id="nav-monitoraggio"
-              class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200">
+              class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all hover:bg-white/10 text-blue-200 hidden">
         <i class="fas fa-binoculars w-5 text-center"></i>
         <span>Monitoraggio</span>
       </button>
@@ -861,6 +867,136 @@ function dashboardPage(): string {
         </div>
 
         <!-- Modale condivisa -->
+      </section>
+
+      <!-- ===================== SEZIONE ANALISI (Unificata) ===================== -->
+      <section id="section-analisi" class="section hidden">
+        <div class="mb-6 flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-800">
+              <i class="fas fa-microscope text-zanichelli-light mr-2"></i>
+              Analisi
+            </h2>
+            <p class="text-gray-500 mt-1">Crea analisi di mercato: campagna novita (1 volume) o monitoraggio disciplinare (2+ volumi)</p>
+          </div>
+          <button onclick="showNewAnalisiForm()" id="btn-new-analisi"
+                  class="px-4 py-2 bg-zanichelli-blue text-white rounded-lg font-medium hover:bg-zanichelli-dark transition-colors flex items-center gap-2">
+            <i class="fas fa-plus"></i>
+            Nuova Analisi
+          </button>
+        </div>
+
+        <!-- Lista analisi esistenti -->
+        <div id="analisi-list" class="space-y-4">
+          <div class="text-center py-12 text-gray-400">
+            <i class="fas fa-microscope text-4xl mb-3 block"></i>
+            <p>Nessuna analisi creata</p>
+            <p class="text-sm mt-1">Crea la tua prima analisi per generare intelligence di mercato</p>
+          </div>
+        </div>
+
+        <!-- Form nuova analisi (nascosto) -->
+        <div id="analisi-form-container" class="hidden mt-6">
+          <div class="bg-white rounded-xl shadow-sm border p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-1">
+              <i class="fas fa-microscope mr-2 text-zanichelli-light"></i>
+              Nuova Analisi
+            </h3>
+            <p class="text-sm text-gray-500 mb-5">Seleziona la materia e i volumi Zanichelli. 1 volume = Campagna novita, 2+ volumi = Monitoraggio disciplinare.</p>
+
+            <form id="analisi-form" onsubmit="handleCreateAnalisi(event)" class="space-y-5">
+
+              <!-- STEP 1: MATERIA -->
+              <div class="space-y-4">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">1</span>
+                  <h4 class="font-semibold text-gray-800">Materia</h4>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Materia *</label>
+                    <select id="analisi-materia" required onchange="onAnalisiMateriaChange()"
+                            class="w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-zanichelli-light outline-none bg-white">
+                      <option value="">— Seleziona materia dal catalogo —</option>
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">Tutti i docenti di questa materia nel database verranno analizzati</p>
+                    <div id="analisi-docenti-count" class="hidden mt-2 text-xs px-3 py-2 rounded-lg"></div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Etichetta (opzionale)</label>
+                    <input type="text" id="analisi-etichetta"
+                           class="w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-zanichelli-light outline-none"
+                           placeholder="Es: Primavera 2026, Test nuovi titoli...">
+                  </div>
+                </div>
+              </div>
+
+              <!-- STEP 2: VOLUMI ZANICHELLI -->
+              <div id="analisi-volumi-section" class="border-t pt-5 hidden">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">2</span>
+                  <h4 class="font-semibold text-gray-800">Volumi Zanichelli</h4>
+                  <span id="analisi-volumi-count" class="text-xs text-gray-400 ml-1"></span>
+                </div>
+                <p class="text-xs text-gray-400 mb-2">Seleziona i volumi. <strong>1 volume</strong> = Campagna novita | <strong>2+ volumi</strong> = Monitoraggio disciplinare</p>
+
+                <!-- Tipo analisi badge (dinamico) -->
+                <div id="analisi-tipo-badge" class="mb-4 hidden">
+                </div>
+
+                <div id="analisi-volumi-container" class="space-y-3">
+                </div>
+
+                <div id="analisi-no-volumi-msg" class="hidden mt-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                  <i class="fas fa-exclamation-triangle mr-1"></i>Nessun volume Zanichelli trovato nel catalogo per questa materia
+                </div>
+              </div>
+
+              <!-- STEP 3: AVVIA -->
+              <div class="border-t pt-5">
+                <div class="flex items-center gap-2 mb-4">
+                  <span class="flex items-center justify-center w-6 h-6 bg-zanichelli-blue text-white rounded-full text-xs font-bold">3</span>
+                  <h4 class="font-semibold text-gray-800">Avvia analisi</h4>
+                  <span id="analisi-tipo-label" class="text-xs text-gray-400 ml-1"></span>
+                </div>
+                <div class="flex gap-3">
+                  <button type="submit" id="btn-avvia-analisi" disabled
+                          class="flex-1 py-3 bg-zanichelli-blue text-white rounded-lg font-medium hover:bg-zanichelli-dark transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-rocket"></i>
+                    <span id="btn-avvia-analisi-label">Crea Analisi e Avvia</span>
+                  </button>
+                  <button type="button" onclick="hideAnalisiForm()"
+                          class="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                    Annulla
+                  </button>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
+        <!-- Progress generazione analisi -->
+        <div id="analisi-progress" class="hidden mt-6">
+          <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between mb-3">
+              <h3 id="analisi-progress-title" class="font-semibold text-gray-700">Analisi in corso...</h3>
+              <span id="analisi-progress-text" class="text-sm font-medium text-zanichelli-light">0/0</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div id="analisi-progress-bar" class="bg-zanichelli-light h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <p id="analisi-progress-detail" class="text-sm text-gray-500 mt-2"></p>
+          </div>
+        </div>
+
+        <!-- Risultati analisi: riusano i container di campagna e monitoraggio -->
+        <!-- Campagna: target-results-container (gia esistente nella sezione campagne) -->
+        <!-- Monitoraggio: monitoraggio-results-container (gia esistente nella sezione monitoraggio) -->
+        <!-- I risultati vengono mostrati qui tramite clonazione/delega da analisi.js -->
+        <div id="analisi-results-wrapper" class="mt-6"></div>
+
       </section>
 
       <!-- ===================== SEZIONE CAMPAGNE ===================== -->
@@ -1732,6 +1868,7 @@ function dashboardPage(): string {
   <script src="/static/js/staging.js"></script>
   <script src="/static/js/gestione.js"></script>
   <script src="/static/js/sync.js"></script>
+  <script src="/static/js/analisi.js"></script>
 </body>
 </html>`
 }
