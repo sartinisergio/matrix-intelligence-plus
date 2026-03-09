@@ -511,10 +511,13 @@ function renderMonitoraggioTargets(targets, showVolumeColumn) {
     // Colore riga basato su urgenza
     const rowBg = t.urgenza === 'ALTA' ? 'bg-red-50/30' : t.urgenza === 'MEDIA' ? 'bg-orange-50/20' : '';
 
-    // Colonna volume (visibile solo se multi-volume)
+    // Colonna volume (visibile solo se multi-volume) — con autore
+    const volumeLabel = t.volume_consigliato
+      ? `${t.volume_consigliato}${t.volume_consigliato_autore ? '<div class="text-xs text-gray-400 mt-0.5">' + t.volume_consigliato_autore + '</div>' : ''}`
+      : '—';
     const volumeCell = showVolumeColumn
-      ? `<td class="px-4 py-3 text-sm text-gray-600">${truncate(t.volume_consigliato || '—', 35)}</td>`
-      : `<td class="px-4 py-3 text-sm text-gray-600" style="display:none">${t.volume_consigliato || '—'}</td>`;
+      ? `<td class="px-4 py-3 text-sm text-gray-600">${volumeLabel}</td>`
+      : `<td class="px-4 py-3 text-sm text-gray-600" style="display:none">${volumeLabel}</td>`;
 
     // Pulsante email disabilitato per DA VERIFICARE
     const isVerificare = t.tipo_azione === 'DA VERIFICARE';
@@ -541,8 +544,19 @@ function renderMonitoraggioTargets(targets, showVolumeColumn) {
         ${volumeCell}
         <td class="px-4 py-3">${monitoraggioAzioneBadge(t.tipo_azione)}</td>
         <td class="px-4 py-3">${monitoraggioUrgenzaBadge(t.urgenza)}</td>
-        <td class="px-4 py-3 text-sm text-gray-600 max-w-xs">
-          ${t.motivazione_scelta ? truncate(t.motivazione_scelta, 100) : '<span class="text-gray-400 italic">In attesa di analisi</span>'}
+        <td class="px-4 py-3 text-sm text-gray-600 max-w-md">
+          ${t.motivazione_scelta
+            ? `<div class="line-clamp-3">${t.motivazione_scelta}</div>
+               ${(t.analisi_cattedra && t.analisi_cattedra.gap_opportunita) ? `<details class="mt-1"><summary class="text-xs text-zanichelli-light cursor-pointer hover:text-zanichelli-dark">Dettaglio analisi</summary>
+                 <div class="mt-1 text-xs space-y-1 bg-gray-50 rounded p-2 border">
+                   ${t.analisi_cattedra.scheda ? '<div><strong>Scheda:</strong> ' + t.analisi_cattedra.scheda + '</div>' : ''}
+                   ${t.analisi_cattedra.taglio ? '<div><strong>Taglio:</strong> ' + t.analisi_cattedra.taglio + '</div>' : ''}
+                   ${t.analisi_cattedra.manuale_attuale ? '<div><strong>Manuale attuale:</strong> ' + t.analisi_cattedra.manuale_attuale + '</div>' : ''}
+                   ${t.analisi_cattedra.gap_opportunita ? '<div><strong>Gap/Opportunita:</strong> ' + t.analisi_cattedra.gap_opportunita + '</div>' : ''}
+                   ${t.analisi_cattedra.leve_cambio && t.analisi_cattedra.leve_cambio.length > 0 ? '<div><strong>Leve:</strong><ul class="list-disc ml-4">' + t.analisi_cattedra.leve_cambio.map(l => '<li>' + l + '</li>').join('') + '</ul></div>' : ''}
+                 </div>
+               </details>` : ''}`
+            : '<span class="text-gray-400 italic">In attesa di analisi</span>'}
         </td>
         <td class="px-4 py-3 text-center">
           <div class="flex flex-col gap-1.5 items-center">
@@ -719,8 +733,11 @@ async function generaTargetMonitoraggio(monitoraggioId) {
             scenario_zanichelli: prog.scenario_zanichelli || 'Non classificato',
             manuale_principale: (prog.manuali_citati || []).find(m => m.ruolo === 'principale')?.titolo || '',
             volume_ottimale: result.volume_ottimale || '',
+            volume_ottimale_autore: result.volume_ottimale_autore || '',
             volume_consigliato: result.volume_ottimale || '',
+            volume_consigliato_autore: result.volume_ottimale_autore || '',
             motivazione_scelta: result.motivazione_scelta || '',
+            analisi_cattedra: result.analisi_cattedra || {},
             allineamento: (result.valutazioni || []).find(v => v.titolo === result.volume_ottimale)?.allineamento || 'medio',
             valutazioni_volumi: result.valutazioni || [],
             stato_analisi: 'completato'
@@ -784,6 +801,7 @@ async function generaTargetMonitoraggio(monitoraggioId) {
           tipo_azione: p.tipo_azione || 'DA VERIFICARE',
           urgenza: p.urgenza || 'BASSA',
           volume_consigliato: p.volume_consigliato || match?.volume_consigliato || '',
+          volume_consigliato_autore: p.volume_consigliato_autore || match?.volume_ottimale_autore || '',
           motivazione_scelta: p.motivazione || match?.motivazione_scelta || '',
           scenario: p.scenario_attuale || match?.scenario || 'Non classificato'
         };
@@ -913,8 +931,11 @@ async function refreshMonitoraggioDocente(targetIndex) {
     currentMonTargets[targetIndex] = {
       ...target,
       volume_ottimale: result.volume_ottimale || '',
+      volume_ottimale_autore: result.volume_ottimale_autore || '',
       volume_consigliato: result.volume_ottimale || '',
+      volume_consigliato_autore: result.volume_ottimale_autore || '',
       motivazione_scelta: result.motivazione_scelta || '',
+      analisi_cattedra: result.analisi_cattedra || {},
       allineamento: (result.valutazioni || []).find(v => v.titolo === result.volume_ottimale)?.allineamento || 'medio',
       valutazioni_volumi: result.valutazioni || [],
       tipo_azione: mapScenarioToAzione(target.scenario, (result.valutazioni || []).find(v => v.titolo === result.volume_ottimale)?.allineamento || 'medio'),

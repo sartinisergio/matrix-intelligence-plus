@@ -355,7 +355,8 @@ async function callOpenAIExtended(systemPrompt, userPrompt, jsonMode = true, max
 async function generaMatchingMultiVolume(programma, volumi, framework) {
   const volumiBlock = volumi.map((v, i) => `
 Volume ${i + 1}: ${v.titolo}
-Indice/Sommario: ${v.indice}
+Autore: ${v.autore || 'N/D'}
+Indice/Sommario: ${v.indice || 'Non disponibile'}
 Temi estratti: ${(v.temi || []).join(', ') || 'non ancora estratti'}
 `).join('\n---\n');
 
@@ -371,16 +372,26 @@ Temi estratti: ${(v.temi || []).join(', ') || 'non ancora estratti'}
 
   const temiDocente = (programma.temi_principali || []).join(', ') || 'Non disponibili';
 
-  const userPrompt = `Sei un analista editoriale esperto nel mercato universitario italiano.
-Hai il programma di un corso universitario e ${volumi.length} volumi del catalogo Zanichelli sulla stessa disciplina.
+  // Testo integrale del programma (se disponibile)
+  let testoProgrammaBlock = '';
+  if (programma.testo_raw && programma.testo_raw.trim().length > 50) {
+    const testoTroncato = programma.testo_raw.trim().slice(0, 15000);
+    testoProgrammaBlock = `
+TESTO INTEGRALE DEL PROGRAMMA:
+${testoTroncato}${programma.testo_raw.trim().length > 15000 ? '\n[... troncato ...]' : ''}`;
+  }
+
+  const userPrompt = `Sei un analista editoriale senior che prepara schede operative per promotori Zanichelli.
+Il promotore visita il docente e deve conoscere a fondo la cattedra, sapere quale volume Zanichelli proporre e con quali argomenti.
 
 PROGRAMMA DEL DOCENTE:
 Materia: ${programma.materia_inferita || programma.materia || 'N/D'}
 Docente: ${programma.docente_nome || 'N/D'}
-Ateneo: ${programma.ateneo || 'N/D'}
+Ateneo: ${programma.ateneo || 'N/D'} — ${programma.classe_laurea || ''}
 Temi del programma: ${temiDocente}
 Manuali attualmente adottati: ${manualiCitati}
 Scenario Zanichelli attuale: ${programma.scenario_zanichelli || 'Non classificato'}
+${testoProgrammaBlock}
 
 VOLUMI ZANICHELLI DA CONFRONTARE:
 ${volumiBlock}
@@ -388,50 +399,69 @@ ${volumiBlock}
 FRAMEWORK DISCIPLINARE DI RIFERIMENTO:
 ${frameworkBlock}
 
-Per ciascun volume fornisci una valutazione rispetto al programma di questo docente specifico. Non usare punteggi numerici.
-
-Rispondi ESCLUSIVAMENTE in JSON con questa struttura:
+ANALIZZA la cattedra come faresti per una scheda di campagna novita e rispondi in JSON:
 {
-  "volume_ottimale": "titolo del volume piu efficace come leva per questo docente",
-  "motivazione_scelta": "spiegazione in 2 righe del perche questo volume e il piu efficace",
+  "volume_ottimale": "titolo ESATTO del volume piu efficace come leva per questo docente",
+  "volume_ottimale_autore": "autore del volume ottimale",
+  "motivazione_scelta": "3-4 frasi concrete: perche questo volume e la leva giusta per QUESTA cattedra. Collega dati specifici del programma a punti di forza del volume.",
+  "analisi_cattedra": {
+    "scheda": "UNA riga: CFU | Esame: modalita | classe di laurea (se disponibili)",
+    "taglio": "Orientamento del corso in 2 frasi (teorico/applicativo/professionalizzante, enfasi particolari)",
+    "specificita": "Cosa distingue questo programma da uno standard? Argomenti inusuali, enfasi, metodologie. Se standard, dirlo.",
+    "manuale_attuale": "Cosa adotta oggi il docente, editore, punti di forza e debolezza rispetto al programma. 2 frasi.",
+    "gap_opportunita": "Gap tra manuale attuale e programma + opportunita per Zanichelli. 2-3 punti concreti. Se nessun gap verificabile, dirlo esplicitamente.",
+    "leve_cambio": ["Leva 1: DATO dal programma → ARGOMENTO per il promotore", "Leva 2: DATO dal programma → ARGOMENTO per il promotore"]
+  },
   "valutazioni": [
     {
       "titolo": "titolo volume",
+      "autore": "autore volume",
       "allineamento": "alto|medio|basso",
+      "overlap_tematico": "percentuale stimata di copertura dei temi del programma (es: 75%)",
       "temi_coperti": ["tema1", "tema2"],
       "temi_scoperti": ["tema3"],
-      "nota_promotore": "osservazione pratica in 1 riga"
+      "punti_forza": "1-2 punti di forza specifici per questa cattedra",
+      "nota_promotore": "osservazione pratica per il promotore in 2 frasi"
     }
   ]
 }
 
 Regole:
-- Usa linguaggio da promotore editoriale esperto, mai accademico
-- Non inventare informazioni non presenti nei testi forniti
-- Se due volumi hanno allineamento equivalente segnalalo esplicitamente nel campo motivazione_scelta`;
+- Ogni affermazione DEVE essere basata sui dati forniti, non inventare
+- Collega SEMPRE i dati del programma ai volumi: non dare giudizi generici
+- Le leve devono emergere dal testo del programma, non essere generiche
+- Tono: nota interna operativa per promotore esperto, zero retorica
+- Se due volumi sono equivalenti, segnalalo esplicitamente
+- Usa linguaggio da promotore editoriale, mai accademico`;
 
-  const systemPrompt = 'Sei un analista editoriale esperto nel mercato universitario italiano. Rispondi ESCLUSIVAMENTE in JSON valido. Non aggiungere testo fuori dal JSON. Basa tutto sui dati forniti, non inventare.';
+  const systemPrompt = 'Sei un analista editoriale senior esperto nel mercato universitario italiano. Rispondi ESCLUSIVAMENTE in JSON valido. Non aggiungere testo fuori dal JSON. Basa TUTTO sui dati forniti: programma, indici, framework. NON inventare contenuti o capitoli.';
 
-  return await callOpenAIExtended(systemPrompt, userPrompt, true, 3000);
+  return await callOpenAIExtended(systemPrompt, userPrompt, true, 4000);
 }
 
 // --- Prioritizzazione complessiva della disciplina ---
 async function generaPrioritaMonitoraggio(docenti, materia) {
-  const docentiBlock = docenti.map(d => `- Docente: ${d.docente_nome || 'N/D'} | Ateneo: ${d.ateneo || 'N/D'}
+  const docentiBlock = docenti.map(d => {
+    const analisi = d.analisi_cattedra || {};
+    return `- Docente: ${d.docente_nome || 'N/D'} | Ateneo: ${d.ateneo || 'N/D'}
   Scenario attuale: ${d.scenario_zanichelli || d.scenario || 'Non classificato'}
   Manuale adottato: ${d.manuale_principale || 'Non identificato'}
-  Volume Zanichelli ottimale: ${d.volume_ottimale || 'N/D'}
+  Volume Zanichelli ottimale: ${d.volume_ottimale || 'N/D'} (${d.volume_ottimale_autore || ''})
   Allineamento tematico: ${d.allineamento || 'non_valutato'}
-  Motivazione: ${d.motivazione_scelta || 'N/D'}`
-  ).join('\n\n');
+  Motivazione: ${d.motivazione_scelta || 'N/D'}
+  Taglio corso: ${analisi.taglio || 'N/D'}
+  Gap/Opportunita: ${analisi.gap_opportunita || 'N/D'}
+  Leve: ${(analisi.leve_cambio || []).join(' | ') || 'N/D'}`;
+  }).join('\n\n');
 
   const userPrompt = `Sei un consulente commerciale editoriale esperto nel mercato universitario italiano.
 Hai la mappa completa delle adozioni per la materia "${materia}".
 
-LISTA DOCENTI CON SCENARI E VOLUMI OTTIMALI:
+LISTA DOCENTI CON ANALISI DETTAGLIATA:
 ${docentiBlock}
 
 Produci una lista di priorita d'azione ordinata per urgenza decrescente.
+Per ogni docente la motivazione deve essere UNA NOTA OPERATIVA di 2-3 frasi che il promotore possa usare direttamente in visita. Include: perche visitare questo docente, con quale volume, e quale argomento aprire.
 
 Criteri di priorita da applicare in questo ordine:
 1. DIFESA ALTA: scenario Principale + allineamento medio o basso (rischio perdita adozione)
@@ -451,7 +481,8 @@ Rispondi ESCLUSIVAMENTE in JSON con questa struttura:
       "tipo_azione": "DIFESA|UPGRADE|CONQUISTA|DA VERIFICARE",
       "urgenza": "ALTA|MEDIA|BASSA",
       "volume_consigliato": "titolo volume ottimale",
-      "motivazione": "frase di 1 riga per il promotore",
+      "volume_consigliato_autore": "autore del volume consigliato",
+      "motivazione": "2-3 frasi operative per il promotore: perche visitare questo docente, con quale argomento aprire, quale leva usare. Basati sui dati di gap/opportunita forniti.",
       "scenario_attuale": "Principale|Alternativo|Assente|Non classificato"
     }
   ],
