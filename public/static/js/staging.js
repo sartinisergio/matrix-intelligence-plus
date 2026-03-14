@@ -48,7 +48,6 @@ function updateStagingSummary() {
   const verified = stagingPrograms.filter(p => p.dati_verificati).length;
   const notVerified = stagingPrograms.length - verified;
   
-  // Controlla materie uniche e disponibilità framework/catalogo
   const materie = [...new Set(stagingPrograms.map(p => p.materia_inferita).filter(Boolean))];
   let fwMissing = [];
   let catMissing = [];
@@ -60,7 +59,6 @@ function updateStagingSummary() {
     if (!manuals || manuals.length === 0) catMissing.push(m);
   }
 
-  // Conta promuovibili
   const promotable = stagingPrograms.filter(p => {
     if (!p.dati_verificati) return false;
     const fw = findFrameworkForSubject(p.materia_inferita);
@@ -146,6 +144,23 @@ function resetStagingFilters() {
   applyStagingFilters();
 }
 
+// --- Badge relazione docente-manuale ---
+function relazioneBadge(relazione) {
+  const config = {
+    'autore':              { color: 'bg-red-100 text-red-700 border-red-200',          icon: 'fa-pen-nib',        label: 'Autore del manuale' },
+    'coautore':            { color: 'bg-red-100 text-red-700 border-red-200',          icon: 'fa-pen-nib',        label: 'Coautore del manuale' },
+    'curatore':            { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: 'fa-clipboard-list', label: 'Curatore del manuale' },
+    'traduttore':          { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: 'fa-language',       label: 'Traduttore del manuale' },
+    'collega_ateneo':      { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: 'fa-university',     label: 'Collega stesso Ateneo' },
+    'collega_dipartimento':{ color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: 'fa-door-open',      label: 'Collega stesso Dip.' }
+  };
+  if (!relazione || relazione === 'nessuna') return '';
+  const c = config[relazione] || { color: 'bg-gray-100 text-gray-600 border-gray-200', icon: 'fa-link', label: relazione };
+  return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${c.color}">
+    <i class="fas ${c.icon} text-[10px]"></i>${c.label}
+  </span>`;
+}
+
 // --- Render lista staging ---
 function renderStagingList(programs) {
   const container = document.getElementById('staging-list');
@@ -189,8 +204,9 @@ function renderStagingList(programs) {
                 <i class="fas fa-book text-gray-300 mr-1"></i>${truncate(manualText, 60)}
               </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap justify-end">
               ${scenarioBadge(p.scenario_zanichelli)}
+              ${relazioneBadge(p.relazione_docente_manuale)}
             </div>
           </div>
 
@@ -263,7 +279,6 @@ async function verifyStagingData(programId) {
   const p = stagingPrograms.find(p => p.id === programId);
   if (!p) return;
 
-  // Mostra modale di verifica con i dati estratti
   const modal = document.getElementById('modal-overlay');
   const content = document.getElementById('modal-content');
 
@@ -315,6 +330,25 @@ async function verifyStagingData(programId) {
             `).join('') || '<p class="text-xs text-gray-400">Nessun manuale citato</p>'}
           </div>
         </div>
+
+        <div>
+          <label class="text-[10px] text-gray-400 uppercase tracking-wide">Relazione docente — manuale adottato</label>
+          <select id="stg-relazione-select" 
+                  class="w-full mt-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-amber-300 outline-none bg-white">
+            <option value="nessuna"              ${(p.relazione_docente_manuale||'nessuna')==='nessuna'              ? 'selected':''}>Nessuna relazione particolare</option>
+            <option value="autore"               ${p.relazione_docente_manuale==='autore'               ? 'selected':''}>✍️ Docente è AUTORE del manuale adottato</option>
+            <option value="coautore"             ${p.relazione_docente_manuale==='coautore'             ? 'selected':''}>✍️ Docente è COAUTORE del manuale adottato</option>
+            <option value="curatore"             ${p.relazione_docente_manuale==='curatore'             ? 'selected':''}>📋 Docente è CURATORE del manuale adottato</option>
+            <option value="traduttore"           ${p.relazione_docente_manuale==='traduttore'           ? 'selected':''}>🌐 Docente è TRADUTTORE del manuale adottato</option>
+            <option value="collega_ateneo"       ${p.relazione_docente_manuale==='collega_ateneo'       ? 'selected':''}>🏛️ Autore è collega dello stesso Ateneo</option>
+            <option value="collega_dipartimento" ${p.relazione_docente_manuale==='collega_dipartimento' ? 'selected':''}>🏢 Autore è collega dello stesso Dipartimento</option>
+          </select>
+          <p class="text-[10px] text-gray-400 mt-1">
+            <i class="fas fa-info-circle mr-1"></i>
+            Questa informazione condiziona la strategia generata dall'AI e il tipo di approccio consigliato.
+          </p>
+        </div>
+
       </div>
 
       <div class="flex gap-3 pt-2">
@@ -342,15 +376,23 @@ async function confirmVerification(programId) {
   const p = stagingPrograms.find(p => p.id === programId);
   if (!p) return;
 
+  // Leggi il selettore relazione se presente nella modale
+  const relazioneEl = document.getElementById('stg-relazione-select');
+  const relazione = relazioneEl ? relazioneEl.value : (p.relazione_docente_manuale || 'nessuna');
+
   try {
     const { error } = await supabaseClient
       .from('programmi')
-      .update({ dati_verificati: true })
+      .update({ 
+        dati_verificati: true,
+        relazione_docente_manuale: relazione
+      })
       .eq('id', p.id);
 
     if (error) throw error;
 
     p.dati_verificati = true;
+    p.relazione_docente_manuale = relazione;
     closeModal();
     showToast('Dati verificati!', 'success');
     applyStagingFilters();
@@ -426,6 +468,21 @@ async function editStagingProgram(id) {
           <input type="text" id="stg-edit-classe" value="${p.classe_laurea || ''}" 
                  class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300 outline-none">
         </div>
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Relazione docente — manuale adottato
+          </label>
+          <select id="stg-edit-relazione" 
+                  class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300 outline-none bg-white text-sm">
+            <option value="nessuna"              ${(p.relazione_docente_manuale||'nessuna')==='nessuna'              ?'selected':''}>Nessuna relazione particolare</option>
+            <option value="autore"               ${p.relazione_docente_manuale==='autore'               ?'selected':''}>✍️ Autore del manuale adottato</option>
+            <option value="coautore"             ${p.relazione_docente_manuale==='coautore'             ?'selected':''}>✍️ Coautore del manuale adottato</option>
+            <option value="curatore"             ${p.relazione_docente_manuale==='curatore'             ?'selected':''}>📋 Curatore del manuale adottato</option>
+            <option value="traduttore"           ${p.relazione_docente_manuale==='traduttore'           ?'selected':''}>🌐 Traduttore del manuale adottato</option>
+            <option value="collega_ateneo"       ${p.relazione_docente_manuale==='collega_ateneo'       ?'selected':''}>🏛️ Collega stesso Ateneo dell'autore</option>
+            <option value="collega_dipartimento" ${p.relazione_docente_manuale==='collega_dipartimento' ?'selected':''}>🏢 Collega stesso Dipartimento dell'autore</option>
+          </select>
+        </div>
       </div>
       <div class="flex gap-3 pt-2">
         <button type="submit" class="flex-1 py-2 bg-zanichelli-blue text-white rounded-lg font-medium hover:bg-zanichelli-dark transition-colors">
@@ -452,7 +509,8 @@ async function saveStagingEdit(event, id) {
     materia_inferita: document.getElementById('stg-edit-materia').value || null,
     corso_laurea: document.getElementById('stg-edit-corso').value || null,
     classe_laurea: document.getElementById('stg-edit-classe').value || null,
-    dati_verificati: false, // Dopo modifica, serve ri-verifica
+    relazione_docente_manuale: document.getElementById('stg-edit-relazione')?.value || 'nessuna',
+    dati_verificati: false,
     updated_at: new Date().toISOString()
   };
 
@@ -561,7 +619,6 @@ function reportMissing(materia, type) {
   const modal = document.getElementById('modal-overlay');
   const content = document.getElementById('modal-content');
 
-  // Raccogli info sui manuali citati per quella materia (utile per il catalogo)
   const progsForMateria = stagingPrograms.filter(p => p.materia_inferita === materia);
   const allManuali = [];
   progsForMateria.forEach(p => {
