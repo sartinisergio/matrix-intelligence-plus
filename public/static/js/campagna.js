@@ -1465,7 +1465,8 @@ async function regenerateMotivation(targetIndex) {
       temi_comuni_framework: target.temi_comuni || [],
       overlap_pct: target.overlap_pct || 0,
       framework_moduli_coperti: target.framework_moduli_coperti || [],
-      framework_dettaglio: frameworkModuliDettaglio
+      framework_dettaglio: frameworkModuliDettaglio,
+      relazione_docente_manuale: freshProgram.relazione_docente_manuale || 'nessuna',
     };
     
     // 9. Genera motivazione via LLM

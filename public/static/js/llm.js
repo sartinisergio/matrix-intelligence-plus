@@ -43,13 +43,11 @@ async function callOpenAI(systemPrompt, userPrompt, jsonMode = true) {
   const content = data.choices[0].message.content;
 
   if (jsonMode) {
-    // Sanitizza il contenuto: rimuove caratteri di controllo che rompono JSON.parse()
     const sanitized = content
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
       .replace(/[\x80-\x9F]/g, '')
       .replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
         const code = parseInt(hex, 16);
-        // Rifiuta surrogates isolati e caratteri di controllo
         if (code >= 0xD800 && code <= 0xDFFF) return '';
         if (code <= 0x1F && code !== 0x09 && code !== 0x0A && code !== 0x0D) return '';
         return match;
@@ -58,7 +56,6 @@ async function callOpenAI(systemPrompt, userPrompt, jsonMode = true) {
     try {
       return JSON.parse(sanitized);
     } catch (e) {
-      // Prova a estrarre JSON dalla risposta
       const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
@@ -108,22 +105,63 @@ RISPONDI SOLO con un JSON:
 }`;
 }
 
-// --- Prompt Motivazione Target ---
-// CONTESTO: il promotore editoriale Zanichelli va dal docente con UNA novita.
-// Il docente conosce gia il catalogo Zanichelli — se non ha adottato Mankiw/Brue
-// finora, non cambiera idea. L'unica leva e il NUOVO volume.
-//
-// PRE-VALUTAZIONE: il volume non c'e ancora. Identifica le LEVE per il cambio.
-//   "Dove il manuale attuale e debole rispetto al programma?"
-//   "Su cosa deve puntare il nuovo volume per convincere il docente a cambiare?"
-//
-// FASE COMPLETA: il volume c'e. Nota operativa con leve specifiche.
-//   "Ecco i punti concreti su cui il nuovo volume e piu forte del concorrente."
+// --- Mappa etichette relazione per i prompt ---
+function getRelazioneLabel(relazione) {
+  const relazioneMap = {
+    'autore':               '⚠️ AUTORE del manuale adottato (il docente ha scritto il libro che usa — NON proporre alternative dirette)',
+    'coautore':             '⚠️ COAUTORE del manuale adottato (il docente ha co-scritto il libro che usa — NON proporre alternative dirette)',
+    'curatore':             '⚠️ CURATORE del manuale adottato (il docente ha curato il libro che usa — approccio indiretto)',
+    'traduttore':           '⚠️ TRADUTTORE del manuale adottato (il docente ha tradotto il libro che usa — approccio indiretto)',
+    'collega_ateneo':       '⚠️ COLLEGA DI ATENEO dell\'autore del manuale adottato (relazione collegiale — evitare confronti diretti)',
+    'collega_dipartimento': '⚠️ COLLEGA DI DIPARTIMENTO dell\'autore del manuale adottato (relazione stretta — massima cautela nel proporre alternative)'
+  };
+  if (!relazione || relazione === 'nessuna') return 'Nessuna relazione particolare';
+  return relazioneMap[relazione] || relazione;
+}
 
+// --- Blocco istruzioni strategiche condizionali in base alla relazione ---
+function getRelazioneStrategicaBlock(relazione) {
+  if (!relazione || relazione === 'nessuna') return '';
+
+  let istruzioni = '';
+  if (['autore', 'coautore'].includes(relazione)) {
+    istruzioni = `
+- NON proporre mai di sostituire il manuale adottato con un volume Zanichelli equivalente
+- NON fare confronti valutativi tra il manuale del docente e altri testi
+- La sezione LEVE deve orientarsi ESCLUSIVAMENTE su volumi Zanichelli per:
+  a) altri insegnamenti tenuti dal docente
+  b) testi complementari/eserciziari/approfondimenti che si affiancano al suo libro
+  c) risorse digitali Zanichelli non in concorrenza con il suo manuale
+- Il tono deve essere di valorizzazione della sua competenza disciplinare
+- La sezione MANUALE ATTUALE deve essere omessa o ridotta a una riga neutra`;
+  } else if (['curatore', 'traduttore'].includes(relazione)) {
+    istruzioni = `
+- Evitare confronti diretti tra il manuale adottato e altri testi
+- Le LEVE devono privilegiare volumi complementari o per altri corsi del docente
+- Menzionare il manuale adottato solo in termini neutri, senza giudizi di valore
+- Evidenziare opportunità di integrazione, non sostituzione`;
+  } else if (['collega_ateneo', 'collega_dipartimento'].includes(relazione)) {
+    istruzioni = `
+- Il docente ha una relazione collegiale con l'autore del manuale adottato
+- Evitare argomentazioni che mettano il docente in una posizione scomoda verso il collega
+- Le LEVE possono puntare su aggiornamenti di edizione, nuovi volumi su temi non coperti dal collega, o testi per altri corsi
+- Tono: valorizzare la decisione autonoma del docente, non la sostituzione del collega`;
+  }
+
+  return `
+═══════════════════════════════════════════
+AVVERTENZA STRATEGICA — RELAZIONE DOCENTE/MANUALE:
+${getRelazioneLabel(relazione)}
+
+ISTRUZIONI OBBLIGATORIE per questa scheda:${istruzioni}
+═══════════════════════════════════════════`;
+}
+
+// --- Prompt Motivazione Target ---
 function getTargetMotivationPrompt(bookData, targetData) {
   const isPreValutazione = bookData.fase === 'pre_valutazione';
   
-  // --- DATI CONCORRENTE (indice dal catalogo, se trovato) ---
+  // --- DATI CONCORRENTE ---
   let concorrenteContext = '';
   let hasIndice = false;
   if (targetData.indice_concorrente) {
@@ -142,10 +180,9 @@ Puoi fare SOLO osservazioni generali basate sul titolo e sull'editore.
 NON inventare capitoli o contenuti del manuale. Scrivi esplicitamente "Indice non disponibile nel catalogo — analisi limitata ai dati del programma."`;
   }
   
-  // --- TESTO INTEGRALE DEL PROGRAMMA (nuovo: passato dal campo testo_programma) ---
+  // --- TESTO INTEGRALE DEL PROGRAMMA ---
   let testoProgrammaBlock = '';
   if (targetData.testo_programma && targetData.testo_programma.trim().length > 50) {
-    // Cap di sicurezza: 25.000 caratteri per evitare PDF anomali
     const testoTroncato = targetData.testo_programma.trim().slice(0, 25000);
     const troncato = targetData.testo_programma.trim().length > 25000;
     testoProgrammaBlock = `
@@ -170,16 +207,20 @@ ${testoTroncato}${troncato ? '\n[... testo troncato a 25.000 caratteri ...]' : '
   // --- MANUALI COMPLEMENTARI ---
   const manualiCompl = targetData.manuali_complementari && targetData.manuali_complementari !== 'Nessuno'
     ? `\n- Testi complementari: ${targetData.manuali_complementari}` : '';
+
+  // --- RELAZIONE DOCENTE-MANUALE ---
+  const relazioneLabel = getRelazioneLabel(targetData.relazione_docente_manuale);
+  const relazioneStrategica = getRelazioneStrategicaBlock(targetData.relazione_docente_manuale);
   
-  // --- DATI CATTEDRA (comuni a entrambe le fasi) ---
+  // --- DATI CATTEDRA ---
   const cattedraBlock = `CATTEDRA:
 - Docente: ${targetData.docente_nome || 'N/D'}
 - Ateneo: ${targetData.ateneo || 'N/D'}
 - Insegnamento: ${targetData.materia_inferita || 'N/D'}, ${targetData.classe_laurea || ''}
 - Manuale adottato: ${targetData.manuale_attuale || 'Nessuno identificato'} ${targetData.manuale_editore ? '(' + targetData.manuale_editore + ')' : ''}${manualiCompl}
-- Scenario: ${targetData.scenario_zanichelli || 'N/D'}`;
+- Scenario: ${targetData.scenario_zanichelli || 'N/D'}
+- Relazione docente-manuale: ${relazioneLabel}`;
 
-  // --- PROMPT ---
   if (isPreValutazione) {
     // ============ PRE-VALUTAZIONE ============
     const metodoAnalisi = hasIndice
@@ -224,6 +265,7 @@ LEVE PER IL CAMBIO: Elenca esattamente 2 leve, numerate. Ogni leva collega un DA
 Formato: "1. [DATO SPECIFICO] → [AZIONE/ARGOMENTO PER IL PROMOTORE]"
 Le leve devono emergere dal testo del programma, NON essere generiche.
 Se non ci sono leve credibili, scrivi: "Cattedra con bassa vulnerabilità al cambio: [motivo specifico]. Il promotore può puntare su: [fattore concreto non legato al contenuto]."
+${relazioneStrategica}
 
 REGOLE (la scheda viene SCARTATA se violate):
 - ${hasIndice ? 'Ogni affermazione sul manuale DEVE essere verificabile nell\'indice fornito.' : 'NON inventare capitoli o contenuti del manuale.'}
@@ -257,11 +299,12 @@ ${metodoCompleto}
 
 ANALIZZA e rispondi con questa struttura:
 
-SITUAZIONE: Cosa adotta oggi e perche e vulnerabile al cambio? ${hasIndice ? 'Confronta l\'indice con i temi del programma per identificare gap reali.' : 'Analisi limitata ai temi del programma.'}
+SITUAZIONE: Cosa adotta oggi e perché è vulnerabile al cambio? ${hasIndice ? 'Confronta l\'indice con i temi del programma per identificare gap reali.' : 'Analisi limitata ai temi del programma.'}
 
 LEVE: Dove il nuovo volume risponde meglio al programma rispetto al concorrente? Confronta argomenti specifici del sommario con i temi del programma. Nomina capitoli concreti.
 
 COLLOQUIO: Cosa dire al docente? Su quali 2-3 punti specifici insistere? Quale argomento aprire per primo?
+${relazioneStrategica}
 
 REGOLE TASSATIVE:
 - ${hasIndice ? 'Verifica ogni affermazione sul concorrente contro l\'indice fornito.' : 'NON inventare contenuti del manuale concorrente.'}
@@ -381,6 +424,12 @@ TESTO INTEGRALE DEL PROGRAMMA:
 ${testoTroncato}${programma.testo_raw.trim().length > 15000 ? '\n[... troncato ...]' : ''}`;
   }
 
+  // Relazione docente-manuale
+  const relazioneLabel = getRelazioneLabel(programma.relazione_docente_manuale);
+  const relazioneAvvertenza = programma.relazione_docente_manuale && programma.relazione_docente_manuale !== 'nessuna'
+    ? `\n⚠️ ATTENZIONE STRATEGICA: ${relazioneLabel}`
+    : '';
+
   const userPrompt = `Sei un analista editoriale senior che prepara schede operative per promotori Zanichelli.
 Il promotore visita il docente e deve conoscere a fondo la cattedra, sapere quale volume Zanichelli proporre e con quali argomenti.
 
@@ -391,6 +440,7 @@ Ateneo: ${programma.ateneo || 'N/D'} — ${programma.classe_laurea || ''}
 Temi del programma: ${temiDocente}
 Manuali attualmente adottati: ${manualiCitati}
 Scenario Zanichelli attuale: ${programma.scenario_zanichelli || 'Non classificato'}
+Relazione docente-manuale: ${relazioneLabel}${relazioneAvvertenza}
 ${testoProgrammaBlock}
 
 VOLUMI ZANICHELLI DA CONFRONTARE:
@@ -399,17 +449,17 @@ ${volumiBlock}
 FRAMEWORK DISCIPLINARE DI RIFERIMENTO:
 ${frameworkBlock}
 
-ANALIZZA la cattedra come faresti per una scheda di campagna novita e rispondi in JSON:
+ANALIZZA la cattedra come faresti per una scheda di campagna novità e rispondi in JSON:
 {
-  "volume_ottimale": "titolo ESATTO del volume piu efficace come leva per questo docente",
+  "volume_ottimale": "titolo ESATTO del volume più efficace come leva per questo docente",
   "volume_ottimale_autore": "autore del volume ottimale",
-  "motivazione_scelta": "3-4 frasi concrete: perche questo volume e la leva giusta per QUESTA cattedra. Collega dati specifici del programma a punti di forza del volume.",
+  "motivazione_scelta": "3-4 frasi concrete: perché questo volume è la leva giusta per QUESTA cattedra. Collega dati specifici del programma a punti di forza del volume.",
   "analisi_cattedra": {
-    "scheda": "UNA riga: CFU | Esame: modalita | classe di laurea (se disponibili)",
+    "scheda": "UNA riga: CFU | Esame: modalità | classe di laurea (se disponibili)",
     "taglio": "Orientamento del corso in 2 frasi (teorico/applicativo/professionalizzante, enfasi particolari)",
     "specificita": "Cosa distingue questo programma da uno standard? Argomenti inusuali, enfasi, metodologie. Se standard, dirlo.",
     "manuale_attuale": "Cosa adotta oggi il docente, editore, punti di forza e debolezza rispetto al programma. 2 frasi.",
-    "gap_opportunita": "Gap tra manuale attuale e programma + opportunita per Zanichelli. 2-3 punti concreti. Se nessun gap verificabile, dirlo esplicitamente.",
+    "gap_opportunita": "Gap tra manuale attuale e programma + opportunità per Zanichelli. 2-3 punti concreti. Se nessun gap verificabile, dirlo esplicitamente.",
     "leve_cambio": ["Leva 1: DATO dal programma → ARGOMENTO per il promotore", "Leva 2: DATO dal programma → ARGOMENTO per il promotore"]
   },
   "valutazioni": [
@@ -432,7 +482,10 @@ Regole:
 - Le leve devono emergere dal testo del programma, non essere generiche
 - Tono: nota interna operativa per promotore esperto, zero retorica
 - Se due volumi sono equivalenti, segnalalo esplicitamente
-- Usa linguaggio da promotore editoriale, mai accademico`;
+- Usa linguaggio da promotore editoriale, mai accademico
+- Se la relazione docente-manuale è autore/coautore: NON suggerire sostituzione del manuale adottato, orienta su volumi complementari o per altri corsi
+- Se la relazione è curatore/traduttore: evita confronti diretti, privilegia integrazione
+- Se la relazione è collega_ateneo/collega_dipartimento: evita posizioni scomode per il docente`;
 
   const systemPrompt = 'Sei un analista editoriale senior esperto nel mercato universitario italiano. Rispondi ESCLUSIVAMENTE in JSON valido. Non aggiungere testo fuori dal JSON. Basa TUTTO sui dati forniti: programma, indici, framework. NON inventare contenuti o capitoli.';
 
@@ -450,7 +503,7 @@ async function generaPrioritaMonitoraggio(docenti, materia) {
   Allineamento tematico: ${d.allineamento || 'non_valutato'}
   Motivazione: ${d.motivazione_scelta || 'N/D'}
   Taglio corso: ${analisi.taglio || 'N/D'}
-  Gap/Opportunita: ${analisi.gap_opportunita || 'N/D'}
+  Gap/Opportunità: ${analisi.gap_opportunita || 'N/D'}
   Leve: ${(analisi.leve_cambio || []).join(' | ') || 'N/D'}`;
   }).join('\n\n');
 
@@ -460,13 +513,13 @@ Hai la mappa completa delle adozioni per la materia "${materia}".
 LISTA DOCENTI CON ANALISI DETTAGLIATA:
 ${docentiBlock}
 
-Produci una lista di priorita d'azione ordinata per urgenza decrescente.
-Per ogni docente la motivazione deve essere UNA NOTA OPERATIVA di 2-3 frasi che il promotore possa usare direttamente in visita. Include: perche visitare questo docente, con quale volume, e quale argomento aprire.
+Produci una lista di priorità d'azione ordinata per urgenza decrescente.
+Per ogni docente la motivazione deve essere UNA NOTA OPERATIVA di 2-3 frasi che il promotore possa usare direttamente in visita. Include: perché visitare questo docente, con quale volume, e quale argomento aprire.
 
-Criteri di priorita da applicare in questo ordine:
+Criteri di priorità da applicare in questo ordine:
 1. DIFESA ALTA: scenario Principale + allineamento medio o basso (rischio perdita adozione)
-2. UPGRADE ALTA: scenario Alternativo + allineamento alto (opportunita concreta di promozione a principale)
-3. CONQUISTA MEDIA: scenario Assente + allineamento alto (opportunita di nuova adozione)
+2. UPGRADE ALTA: scenario Alternativo + allineamento alto (opportunità concreta di promozione a principale)
+3. CONQUISTA MEDIA: scenario Assente + allineamento alto (opportunità di nuova adozione)
 4. DIFESA MEDIA: scenario Principale + allineamento alto (consolidamento, nessun rischio immediato)
 5. UPGRADE MEDIA: scenario Alternativo + allineamento medio
 6. CONQUISTA BASSA: scenario Assente + allineamento medio o basso
@@ -482,7 +535,7 @@ Rispondi ESCLUSIVAMENTE in JSON con questa struttura:
       "urgenza": "ALTA|MEDIA|BASSA",
       "volume_consigliato": "titolo volume ottimale",
       "volume_consigliato_autore": "autore del volume consigliato",
-      "motivazione": "2-3 frasi operative per il promotore: perche visitare questo docente, con quale argomento aprire, quale leva usare. Basati sui dati di gap/opportunita forniti.",
+      "motivazione": "2-3 frasi operative per il promotore: perché visitare questo docente, con quale argomento aprire, quale leva usare. Basati sui dati di gap/opportunità forniti.",
       "scenario_attuale": "Principale|Alternativo|Assente|Non classificato"
     }
   ],
@@ -498,13 +551,12 @@ Rispondi ESCLUSIVAMENTE in JSON con questa struttura:
 
 Regole:
 - Usa linguaggio da promotore editoriale esperto, mai accademico
-- La nota_strategica deve evidenziare il pattern piu rilevante che emerge dalla disciplina nel suo complesso
-- Non ripetere informazioni gia presenti nei campi strutturati
+- La nota_strategica deve evidenziare il pattern più rilevante che emerge dalla disciplina nel suo complesso
+- Non ripetere informazioni già presenti nei campi strutturati
 - I docenti con allineamento "non_valutato" devono comparire in fondo con motivazione "Analisi non completata — necessaria rigenerazione"`;
 
   const systemPrompt = 'Sei un consulente commerciale editoriale esperto. Rispondi ESCLUSIVAMENTE in JSON valido. Non aggiungere testo fuori dal JSON. Ordina i docenti per urgenza decrescente secondo i criteri forniti.';
 
-  // max_tokens piu alto: la lista puo contenere molti docenti
   const maxTokens = Math.min(6000, 1500 + (docenti.length * 120));
   return await callOpenAIExtended(systemPrompt, userPrompt, true, maxTokens);
 }
