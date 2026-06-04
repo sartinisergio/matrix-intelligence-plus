@@ -2,87 +2,87 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What This Project Does
+## Cosa fa questo progetto
 
-MATRIX Intelligence Plus is an AI-powered commercial intelligence platform for Zanichelli university textbook promoters. It analyzes Italian university exam programs (PDFs), matches them against a catalog of 85+ manuals, and generates personalized email campaigns. The UI and all data are in Italian.
+MATRIX Intelligence Plus è una piattaforma di intelligenza commerciale basata su IA per i promotori universitari Zanichelli. Analizza i programmi d'esame universitari italiani (PDF), li abbina a un catalogo di 85+ manuali e genera campagne email personalizzate. Tutta l'interfaccia e i dati sono in italiano.
 
-## Build & Development Commands
+## Comandi di build e sviluppo
 
 ```bash
-npm install              # Install dependencies
-npm run dev              # Dev server (Hono + Cloudflare Pages adapter)
-npm run build            # Production build for Cloudflare Pages → dist/
-npm run build:netlify    # Production build for Netlify (static HTML) → dist/
-npm run preview          # Preview Cloudflare build locally
-npm run deploy           # Build + deploy to Cloudflare Pages
+npm install              # Installa le dipendenze
+npm run dev              # Server di sviluppo (Hono + adapter Cloudflare Pages)
+npm run build            # Build di produzione per Cloudflare Pages → dist/
+npm run build:netlify    # Build di produzione per Netlify (HTML statico) → dist/
+npm run preview          # Anteprima locale della build Cloudflare
+npm run deploy           # Build + deploy su Cloudflare Pages
 ```
 
-There is no test suite — all testing is manual via the browser.
+Non esiste una suite di test: tutto il testing è manuale via browser.
 
-## Architecture
+## Architettura
 
-The app is a **minimal Hono backend + vanilla JS SPA**. The Hono server (`src/index.tsx`) serves two HTML shells: a login page (at `/` and `/login`) and a dashboard (at `/dashboard`). All business logic lives in the browser.
+L'app è una **SPA vanilla JS con backend Hono minimale**. Il server Hono (`src/index.tsx`) serve due shell HTML: una pagina di login (su `/` e `/login`) e una dashboard (su `/dashboard`). Tutta la logica di business gira nel browser.
 
-### Frontend Module Load Order
+### Ordine di caricamento dei moduli frontend
 
-The dashboard HTML loads these scripts in sequence — each depends on the previous ones:
+La dashboard carica questi script in sequenza — ciascuno dipende dai precedenti:
 
-1. `config.js` — Supabase client init, OpenAI model config, Zanichelli catalog lookup
-2. `utils.js` — Toast notifications, formatting helpers, tab navigation
-3. `auth.js` — Login/register, session management, role checks
-4. `llm.js` — OpenAI API calls with prompt templates; enforces JSON mode, sanitizes invalid UTF-8
-5. `upload.js` — PDF drag-drop UI, PDF.js text extraction, batch processing
-6. `database.js` — Supabase CRUD for `programmi` table, manual auto-matching, filtering
-7. `archivio.js` — Adoption archive with CSV export
-8. `campagna.js` — Campaign creation (largest module, 104KB); 2-phase AI analysis + email generation
-9. `staging.js` — Staging validation workflow (human review before DB promotion)
-10. `gestione.js` — Admin panel for frameworks, catalog, and user management (gestore role only)
-11. `sync.js` — Incremental data sync from the Matrix GitHub repo
-12. `analisi.js` — Unified analysis workflows (campaigns + monitoring)
-13. `monitoraggio.js` — Disciplinary-level monitoring across multiple volumes
+1. `config.js` — Inizializzazione client Supabase, configurazione modelli OpenAI, lookup catalogo Zanichelli
+2. `utils.js` — Toast di notifica, helper di formattazione, navigazione tra tab
+3. `auth.js` — Login/registrazione, gestione sessione, controllo ruoli
+4. `llm.js` — Chiamate API OpenAI con prompt template; impone la modalità JSON, sanifica UTF-8 non valido
+5. `upload.js` — UI drag-drop PDF, estrazione testo con PDF.js, elaborazione batch
+6. `database.js` — CRUD Supabase sulla tabella `programmi`, abbinamento automatico manuali, filtri
+7. `archivio.js` — Archivio adozioni con export CSV
+8. `campagna.js` — Creazione campagne (modulo più grande, 104KB); analisi AI in 2 fasi + generazione email
+9. `staging.js` — Workflow di validazione staging (revisione umana prima della promozione in DB)
+10. `gestione.js` — Pannello admin per framework, catalogo e utenti (solo ruolo gestore)
+11. `sync.js` — Sincronizzazione incrementale dei dati dal repo GitHub Matrix
+12. `analisi.js` — Workflow di analisi unificata (campagne + monitoraggio)
+13. `monitoraggio.js` — Monitoraggio disciplinare su più volumi
 
-### Data Flow
+### Flusso dei dati
 
 ```
-PDF Upload
-  → PDF.js extracts text (client-side)
-    → llm.js pre-classifies via GPT (docente, ateneo, materia, manuali)
-      → staging table (human validation checkpoint)
-        → programmi table (on approval)
-          → database.js auto-matches with catalog
-            → campagna.js / monitoraggio.js generate campaigns
-              → Email templates (3 scenarios: Conquista, Aggiornamento, Upgrade)
+Upload PDF
+  → PDF.js estrae il testo (client-side)
+    → llm.js pre-classifica via GPT (docente, ateneo, materia, manuali)
+      → tabella staging (checkpoint di validazione umana)
+        → tabella programmi (dopo approvazione)
+          → database.js abbina automaticamente al catalogo
+            → campagna.js / monitoraggio.js generano le campagne
+              → Template email (3 scenari: Conquista, Aggiornamento, Upgrade)
 ```
 
-### Supabase Schema
+### Schema Supabase
 
-Key tables (all with Row-Level Security):
-- `profili` — User profiles; roles: `promotore` (default) or `gestore` (admin)
-- `programmi` — University exam programs (docente, ateneo, materia, scenario, manuali)
-- `campagne` — Promotional campaigns; `tipo` is `'novita'` or `'monitoraggio'`
-- `frameworks_condivisi` — Shared disciplinary evaluation frameworks (gestore-managed)
-- `catalogo_manuali_condiviso` — Shared manual catalog (gestore-managed)
+Tabelle principali (tutte con Row-Level Security):
+- `profili` — Profili utente; ruoli: `promotore` (default) o `gestore` (admin)
+- `programmi` — Programmi d'esame universitari (docente, ateneo, materia, scenario, manuali)
+- `campagne` — Campagne promozionali; `tipo` è `'novita'` o `'monitoraggio'`
+- `frameworks_condivisi` — Framework disciplinari condivisi (gestiti dal gestore)
+- `catalogo_manuali_condiviso` — Catalogo manuali condiviso (gestito dal gestore)
 
-The first registered user automatically becomes `gestore`; others register as `promotore` and can self-promote from Settings.
+Il primo utente registrato diventa automaticamente `gestore`; gli altri si registrano come `promotore` e possono auto-promuoversi dalle Impostazioni.
 
-### Deployment Targets
+### Target di deploy
 
-- **Netlify (production)**: `npm run build:netlify` → `build-netlify.mjs` generates static HTML + `_redirects` for SPA routing; Netlify Functions proxy API calls
-- **Cloudflare Pages (optional)**: `npm run build` → Hono server in `dist/`
-- `netlify/functions/health.mjs` provides a health-check endpoint
+- **Netlify (produzione)**: `npm run build:netlify` → `build-netlify.mjs` genera HTML statico + `_redirects` per il routing SPA; le Netlify Functions fanno da proxy alle chiamate API
+- **Cloudflare Pages (opzionale)**: `npm run build` → server Hono in `dist/`
+- `netlify/functions/health.mjs` fornisce un endpoint di health-check
 
-### Static Data
+### Dati statici
 
-`public/data/catalogo_manuali.json` (85+ textbooks) and `public/data/catalogo_framework.json` (21 frameworks) are used as static fallbacks when the Supabase shared catalog is unavailable.
+`public/data/catalogo_manuali.json` (85+ libri) e `public/data/catalogo_framework.json` (21 framework) sono usati come fallback statico quando il catalogo condiviso su Supabase non è disponibile.
 
 ### GitHub Actions
 
-`.github/workflows/supabase-keepalive.yml` runs every 3 days at 08:00 UTC to prevent Supabase free-tier hibernation.
+`.github/workflows/supabase-keepalive.yml` viene eseguito ogni 3 giorni alle 08:00 UTC per evitare l'ibernazione del piano free Supabase.
 
-## Key Conventions
+## Convenzioni principali
 
-- **Language**: All UI text, variable names for business concepts, and data values are in Italian.
-- **API keys at runtime**: OpenAI key and Supabase credentials are stored in `localStorage`, entered by each user in Settings. There are no `.env` files.
-- **Supabase anon key**: The public anon key in `config.js` is intentionally public; security is enforced by RLS policies.
-- **JSON mode**: All OpenAI calls use `response_format: { type: "json_object" }`. Responses are sanitized for invalid UTF-8 before `JSON.parse`.
-- **DB columns**: snake_case. JS variables: camelCase.
+- **Lingua**: Tutto il testo dell'interfaccia, i nomi delle variabili per i concetti di business e i valori dei dati sono in italiano.
+- **Chiavi API a runtime**: La chiave OpenAI e le credenziali Supabase sono salvate in `localStorage`, inserite da ogni utente nelle Impostazioni. Non esistono file `.env`.
+- **Anon key Supabase**: La chiave pubblica anon in `config.js` è intenzionalmente pubblica; la sicurezza è garantita dalle policy RLS.
+- **Modalità JSON**: Tutte le chiamate OpenAI usano `response_format: { type: "json_object" }`. Le risposte vengono sanificate da UTF-8 non valido prima del `JSON.parse`.
+- **Colonne DB**: snake_case. Variabili JS: camelCase.
