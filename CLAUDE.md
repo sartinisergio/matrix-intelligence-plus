@@ -1,104 +1,104 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Questo file fornisce indicazioni a Claude Code (claude.ai/code) quando lavora con il codice in questo repository.
 
-## Project Overview
+## Panoramica del Progetto
 
-**MATRIX Intelligence Plus** is an AI-powered commercial intelligence platform for university textbook promoters (targeting Italian universities). It analyzes exam syllabi PDFs, identifies textbook adoptions, and generates personalized outreach campaigns with ready-to-send emails. Production URL: https://matrix-intelligence.netlify.app
+**MATRIX Intelligence Plus** è una piattaforma di intelligenza commerciale alimentata da AI per promotori di libri di testo universitari (mercato italiano). Analizza PDF di programmi d'esame, identifica adozioni di testi e genera campagne di contatto personalizzate con email pronte all'invio. URL di produzione: https://matrix-intelligence.netlify.app
 
-## Development Commands
+## Comandi di Sviluppo
 
 ```bash
-npm install          # Install dependencies
-npm run dev          # Start Vite dev server on localhost:3000
-npm run build        # Build for Cloudflare Pages (outputs to dist/)
-node build-netlify.mjs  # Build static HTML for Netlify (outputs to dist/)
-npm run preview      # Preview with Wrangler (Cloudflare)
-npm run deploy       # Deploy to Cloudflare Pages
+npm install              # Installa le dipendenze
+npm run dev              # Avvia il dev server Vite su localhost:3000
+npm run build            # Build per Cloudflare Pages (output in dist/)
+node build-netlify.mjs   # Build HTML statico per Netlify (output in dist/)
+npm run preview          # Anteprima con Wrangler (Cloudflare)
+npm run deploy           # Deploy su Cloudflare Pages
 ```
 
-There is no test suite. There is no linter configured.
+Non esiste una suite di test né un linter configurato.
 
-## Architecture
+## Architettura
 
-### Dual Deployment Model
+### Doppio Target di Deployment
 
-The app targets two platforms via separate build paths:
-- **Cloudflare Pages**: `vite.config.ts` uses `@hono/vite-build` with entry `src/index.tsx`
-- **Netlify**: `build-netlify.mjs` extracts HTML templates from `src/index.tsx` via regex, generating static `dist/index.html` and `dist/dashboard.html`
+L'app supporta due piattaforme tramite percorsi di build separati:
+- **Cloudflare Pages**: `vite.config.ts` usa `@hono/vite-build` con entry point `src/index.tsx`
+- **Netlify**: `build-netlify.mjs` estrae i template HTML da `src/index.tsx` tramite regex, generando `dist/index.html` e `dist/dashboard.html` statici
 
-Both targets serve the same frontend code — the Netlify build is purely static HTML extraction.
+Entrambi i target servono lo stesso codice frontend — la build Netlify è una pura estrazione statica dell'HTML.
 
 ### Backend (`src/index.tsx`)
 
-A single 1,874-line Hono file. It serves only 4 routes: `GET /`, `GET /login`, `GET /dashboard`, and `GET /api/health`. The real application logic lives entirely in the frontend JS modules. The backend's role is to render HTML templates containing the JS module `<script>` tags.
+Un singolo file Hono da 1.874 righe. Gestisce solo 4 route: `GET /`, `GET /login`, `GET /dashboard` e `GET /api/health`. Tutta la logica applicativa vive nei moduli JS del frontend. Il ruolo del backend è rendere i template HTML che includono i tag `<script>` dei moduli JS.
 
-### Frontend Modules (`public/static/js/`)
+### Moduli Frontend (`public/static/js/`)
 
-Vanilla JavaScript modules loaded in dependency order. No bundler processes them — they are served as-is. Module responsibilities and load order:
+Moduli JavaScript vanilla caricati in ordine di dipendenza. Non vengono processati da un bundler — sono serviti così come sono. Responsabilità e ordine di caricamento:
 
-| Module | Purpose |
-|--------|---------|
-| `config.js` | Supabase client init, OpenAI key management, app-wide config |
-| `utils.js` | Toast notifications, badge helpers, CSV export |
-| `auth.js` | Supabase Auth login/register, role detection, session management |
-| `llm.js` | All OpenAI API calls and prompt construction |
-| `upload.js` | PDF drag-drop, PDF.js text extraction, batch upload with progress |
-| `database.js` | `programmi` table CRUD, catalog matching, scenario filtering |
-| `archivio.js` | Adoption archive view with filters and stats |
-| `campagna.js` | Campaign CRUD, 2-phase AI intelligence generation, email templates |
-| `staging.js` | Staging area validation and promotion workflow |
-| `gestione.js` | Admin panel for frameworks, catalog, and user management (gestore role only) |
-| `sync.js` | Incremental sync from Matrix GitHub repository |
-| `analisi.js` | Unified analysis section orchestrating campagna + monitoraggio |
-| `monitoraggio.js` | Multi-volume disciplinary monitoring |
+| Modulo | Scopo |
+|--------|-------|
+| `config.js` | Inizializzazione client Supabase, gestione chiave OpenAI, configurazione globale |
+| `utils.js` | Notifiche toast, badge helper, esportazione CSV |
+| `auth.js` | Login/registrazione Supabase Auth, rilevamento ruolo, gestione sessione |
+| `llm.js` | Tutte le chiamate OpenAI API e costruzione dei prompt |
+| `upload.js` | Drag-drop PDF, estrazione testo via PDF.js, upload batch con progress bar |
+| `database.js` | CRUD tabella `programmi`, corrispondenza catalogo, filtri per scenario |
+| `archivio.js` | Vista archivio adozioni con filtri e statistiche |
+| `campagna.js` | CRUD campagne, generazione intelligenza AI a 2 fasi, template email |
+| `staging.js` | Area di staging, validazione e workflow di promozione |
+| `gestione.js` | Pannello admin per framework, catalogo e utenti (solo ruolo gestore) |
+| `sync.js` | Sincronizzazione incrementale dal repository GitHub Matrix |
+| `analisi.js` | Sezione analisi unificata che orchestra campagna + monitoraggio |
+| `monitoraggio.js` | Monitoraggio disciplinare multi-volume |
 
-### Data Flow
+### Flusso dei Dati
 
 ```
-PDF Upload → PDF.js (client) → OpenAI extraction → staging (programmi.stato='staging')
-                                                        ↓
-                                              Promoter validates/corrects
-                                                        ↓
-                                              Production DB (stato='database')
-                                                        ↓
-                                        Campaign creation (campagne table)
-                                                        ↓
-                             2-Phase AI: pre-evaluation → complete analysis + emails
+Upload PDF → PDF.js (client) → estrazione OpenAI → staging (programmi.stato='staging')
+                                                           ↓
+                                              Il promotore valida/corregge
+                                                           ↓
+                                              DB produzione (stato='database')
+                                                           ↓
+                                         Creazione campagna (tabella campagne)
+                                                           ↓
+                              AI a 2 fasi: pre-valutazione → analisi completa + email
 ```
 
-### State & Storage
+### Stato e Storage
 
-- **Supabase**: All persistent data. Credentials (URL + anon key) stored in `localStorage` so users can self-configure. Anon key is safe to expose — security enforced via Row-Level Security (RLS).
-- **localStorage**: OpenAI API key (never sent to server), LLM model selection, Supabase credentials, Matrix sync timestamps, synced catalog/framework JSON blobs, email signature.
-- **No server-side sessions**: Auth state managed entirely by Supabase client SDK.
+- **Supabase**: tutti i dati persistenti. Le credenziali (URL + anon key) sono in `localStorage` per permettere la self-configurazione. L'anon key è sicura lato client — la sicurezza è garantita da Row-Level Security (RLS).
+- **localStorage**: chiave API OpenAI (mai inviata al server), selezione modello LLM, credenziali Supabase, timestamp sincronizzazione Matrix, blob JSON di catalogo/framework sincronizzati, firma email.
+- **Nessuna sessione server-side**: lo stato di autenticazione è gestito interamente dall'SDK client di Supabase.
 
-### Role System
+### Sistema dei Ruoli
 
-Two roles: `promotore` (standard) and `gestore` (admin). Stored in the `profili` table. The `gestione.js` section only renders for gestores. First registered user auto-becomes gestore; if no gestore exists, any user can self-promote via Settings.
+Due ruoli: `promotore` (standard) e `gestore` (admin). Memorizzati nella tabella `profili`. La sezione `gestione.js` viene renderizzata solo per i gestori. Il primo utente registrato diventa automaticamente gestore; se non esiste nessun gestore, qualsiasi utente può auto-promuoversi dalle Impostazioni.
 
-### LLM Integration
+### Integrazione LLM
 
-All AI calls go through `llm.js` directly from the browser using the user's OpenAI API key from localStorage. The backend never touches the key. Supported models: `gpt-4o-mini` (default/recommended), `gpt-4o`, `gpt-4.1-mini`, `gpt-4.1`.
+Tutte le chiamate AI vengono effettuate da `llm.js` direttamente dal browser, usando la chiave OpenAI dell'utente da localStorage. Il backend non tocca mai la chiave. Modelli supportati: `gpt-4o-mini` (default/consigliato), `gpt-4o`, `gpt-4.1-mini`, `gpt-4.1`.
 
-**Two-phase campaign intelligence**:
-1. **Pre-evaluation** (no volume yet): crosses program themes + competitor index + disciplinary framework → SITUATION/LEVERAGE/NEGOTIATION cards
-2. **Complete analysis** (volume index available): re-runs with direct volume vs competitor comparison
+**Intelligenza campagna a 2 fasi**:
+1. **Pre-valutazione** (volume non ancora disponibile): incrocia temi del programma + indice competitor + framework disciplinare → schede SITUAZIONE/LEVA/NEGOZIAZIONE
+2. **Analisi completa** (indice del volume disponibile): rigenera con confronto diretto volume vs competitor
 
-**Scenario classification** (Zanichelli presence in program):
-- **A (Green)**: Framework + textbooks available → full qualitative analysis
-- **B (Yellow)**: Framework or textbooks only → partial
-- **C (Orange)**: No resources → basic matching
+**Classificazione scenario** (presenza Zanichelli nel programma):
+- **A (Verde)**: framework + libri disponibili → analisi qualitativa completa
+- **B (Giallo)**: solo framework o solo libri → analisi parziale
+- **C (Arancione)**: nessuna risorsa → corrispondenza base
 
-### Static Data Fallback
+### Dati Statici di Fallback
 
-`/public/static/data/catalogo_manuali.json` (85 textbooks) and `catalogo_framework.json` (21 disciplinary frameworks) are fallbacks when no Matrix sync data exists in localStorage.
+`/public/static/data/catalogo_manuali.json` (85 libri) e `catalogo_framework.json` (21 framework disciplinari) vengono usati come fallback quando non esistono dati Matrix sincronizzati in localStorage.
 
-### Matrix Sync
+### Sincronizzazione Matrix
 
-`sync.js` fetches from the GitHub repository `sartinisergio/matrix-analisi-programmi`. It compares local vs remote manifests and downloads only changed entries. "Force complete" resets and re-downloads everything.
+`sync.js` recupera dati dal repository GitHub `sartinisergio/matrix-analisi-programmi`. Confronta i manifest locali con quelli remoti e scarica solo le voci modificate. Il pulsante "Forza completa" azzera e riscarica tutto.
 
-## Database Schema (Supabase)
+## Schema Database (Supabase)
 
 ```sql
 profili         -- user_id (UUID), email, ruolo ('promotore'|'gestore')
@@ -110,16 +110,16 @@ campagne        -- libro_titolo/autore/editore/materia, indice (text), temi (JSO
                 --   target_generati (JSONB), tipo ('campagna'|'monitoraggio'),
                 --   volumi_monitoraggio (JSONB), sintesi_disciplina (JSONB),
                 --   stato ('bozza'|'completata')
-frameworks_condivisi      -- nome, materia, dati (JSONB), caricato_da
+frameworks_condivisi       -- nome, materia, dati (JSONB), caricato_da
 catalogo_manuali_condiviso -- titolo, autore, editore, materia, is_zanichelli, dati (JSONB)
 ```
 
-Migration files live in `sql/`.
+I file di migrazione si trovano in `sql/`.
 
-## Key Conventions
+## Convenzioni Chiave
 
-- **Italian UI**: All user-facing strings, variable names, and database field names are in Italian.
-- **Zanichelli detection**: Uses `is_zanichelli` flag on catalog entries, or checks for `editore === 'CEA'` (Zanichelli sub-brand), or the `type` field from Matrix sync data.
-- **Progress rendering**: Heavy async operations use `requestAnimationFrame`-based progress bars, not simple CSS transitions.
-- **No import/export syntax**: Frontend modules are loaded as classic scripts (not ES modules) — they share a global scope. Functions and state are attached to `window` or declared globally.
-- **Email template types**: Three templates keyed by scenario — "Conquest" (Zanichelli absent), "Update" (Zanichelli primary), "Upgrade" (Zanichelli alternative).
+- **UI in italiano**: tutte le stringhe visibili all'utente, i nomi delle variabili e i campi del database sono in italiano.
+- **Rilevamento Zanichelli**: usa il flag `is_zanichelli` sulle voci del catalogo, oppure controlla `editore === 'CEA'` (marchio secondario Zanichelli), oppure il campo `type` dai dati di sync Matrix.
+- **Rendering progress bar**: le operazioni async pesanti usano progress bar basate su `requestAnimationFrame`, non semplici transizioni CSS.
+- **Nessuna sintassi import/export**: i moduli frontend sono caricati come script classici (non ES modules) — condividono lo scope globale. Funzioni e stato sono attaccati a `window` o dichiarati globalmente.
+- **Tipi di template email**: tre template distinti per scenario — "Conquista" (Zanichelli assente), "Aggiornamento" (Zanichelli primario), "Upgrade" (Zanichelli alternativo).
